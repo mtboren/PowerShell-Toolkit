@@ -28,7 +28,7 @@ CompanyName = 'Pure Storage, Inc.'
 Copyright = '(c) 2014 Pure Storage, Inc. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Pure Storage REST API and Windows PowerShell integration.'
+Description = 'Pure Storage REST API 1.2 Windows PowerShell integration.'
 
 # Minimum version of the Windows PowerShell engine required by this module
 # PowerShellVersion = ''
