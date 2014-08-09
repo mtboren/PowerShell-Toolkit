@@ -29,7 +29,7 @@ Function Get-PfaHosts() {
     Connect-PfaController -FlashArray $FlashArray
     Invoke-RestMethod -Method Get -Uri "https://$FlashArray/api/1.2/host" -WebSession $Session -ContentType "application/json" | Format-Table -AutoSize
     Disconnect-PfaController -FlashArray $FlashArray
-}
+} 
 
 Function New-PfaSnapshot() {
     [CmdletBinding()]
