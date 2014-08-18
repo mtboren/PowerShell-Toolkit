@@ -8,8 +8,8 @@
 # Script module or binary module file associated with this manifest.
 RootModule = 'PureStorage.PowerShell.Toolkit.psm1'
 
-# Version number of this module.
-ModuleVersion = '1.0.0.4'
+# Version number of this module; major.minor[.build[.revision]]
+ModuleVersion = '1.1.0.0'
 
 # ID used to uniquely identify this module
 GUID = '80ed4b74-cd66-4428-b4dd-db839991c2d6'
