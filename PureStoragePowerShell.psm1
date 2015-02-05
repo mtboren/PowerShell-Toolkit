@@ -5,7 +5,7 @@
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.0.0.0
+	 Version:		2.0.0.1
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -2471,10 +2471,10 @@ function Connect-PfaHost()
 	)
 	$HostConnect = $null
 	$HostConnect = [ordered]@{
-		name = $HostName
+		name = $Name
 		vol = $Volume
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/host/$HostName/volume/$Volume"
+	$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
 	Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
 }
 
@@ -2511,10 +2511,10 @@ function Connect-PfaVolume()
 	)
 	$HostConnect = $null
 	$HostConnect = [ordered]@{
-		name = $HostName
+		name = $Name
 		vol = $Volume
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/host/$HostName/volume/$Volume"
+	$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
 	Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
 }
 
@@ -2597,15 +2597,15 @@ function Remove-PfaHost()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	try
-	{
+	#try
+	#{
 		$Uri = "$PureStorageURIBase/host/$Name"
 		$Return = Invoke-RestMethod -Method Delete -Uri $Uri -WebSession $Session
-	}
-	catch
-	{
-		Throw ("Error removing host ($Name).")
-	}
+	#}
+	#catch
+	#{
+#		Throw ("Error removing host ($Name).")
+#	}
 }
 
 #endregion
