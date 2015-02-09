@@ -4,7 +4,7 @@
 	 Created by:   	barkz@PureStoragePowerShell.com
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psd1
-	 Version:		2.0.0.1
+	 Version:		2.1.0.26
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -30,7 +30,7 @@
 RootModule = 'PureStoragePowerShell.psm1'
 
 # Version number of this module; major.minor[.build[.revision]]
-ModuleVersion = '2.0.0.1'
+ModuleVersion = '2.1.0.26'
 
 # ID used to uniquely identify this module
 GUID = '80ed4b74-cd66-4428-b4dd-db839991c2d6'
