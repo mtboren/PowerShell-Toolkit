@@ -1,11 +1,11 @@
 ﻿<#	
 	===========================================================================
-	 Created with: 	SAPIEN Technologies, Inc., PowerShell Studio 2014 v4.1.74
+	 Created with: 	SAPIEN Technologies, Inc., PowerShell Studio 2015
 	 Created by:   	barkz@PureStoragePowerShell.com
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.1.0.26
+	 Version:		2.2.1.302
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -30,6 +30,20 @@
  	for full details.
 #>
 #Requires -Version 3
+
+#region Helper-Functions
+<#
+	.SYNOPSIS
+		Helper function to display error message(s). 
+#>
+function Display-Error()
+{
+	$Err = ConvertFrom-Json $_.ErrorDetails
+	Write-Host "ERROR:" $Err.msg "(" $Err.ctx ")" -ForegroundColor Red
+}
+
+
+#endregion
 
 #region Miscellenaous-Cmdlets
 <#
@@ -213,6 +227,8 @@ Function Register-PfaHostVolumes ()
 		}
 	}
 }
+
+
 #endregion
 
 #region FA-Authentication-Cmdlets
@@ -491,13 +507,20 @@ function New-PfaShadowCopy()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][string]$Volume,
+		[Parameter(Mandatory = $True)][string[]]$Volume,
 		[Parameter(Mandatory = $True)][string]$ScriptName = "PUREVSS-SNAP",
 		[Parameter(Mandatory = $True)][string]$MetadataFile,
 		[Parameter(Mandatory = $True)][string]$ShadowCopyAlias,
 		[ValidateSet('On', 'Off')][string]$VerboseMode = "On"
 	)
 	$dsh = "./$ScriptName.PFA"
+	
+	foreach ($Vol in $Volume)
+	{
+		"ADD VOLUME $Vol ALIAS $ShadowCopyAlias PROVIDER {781c006a-5829-4a25-81e3-d5e43bd005ab}"
+	}
+	
+	
 	"RESET",
 	"SET CONTEXT PERSISTENT",
 	"SET OPTION TRANSPORTABLE",
@@ -1879,8 +1902,8 @@ function New-PfaVolume()
 	Param (
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
-		[Parameter()][ValidateNotNullOrEmpty()][string] $Size = $null,
-		[Parameter()][ValidateNotNullOrEmpty()][string] $Source = $null,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Size,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Source,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
@@ -2022,7 +2045,7 @@ function Remove-PfaVolume()
 	}
 	catch
 	{
-		Throw("Error removing volume ($Name).")
+		Display-Error	
 	}
 }
 
@@ -3949,6 +3972,45 @@ function Remove-PfaProtectionGroup()
 
 <#
 	.SYNOPSIS
+		Destroys the specified protection group snapshot(s).
+
+	.DESCRIPTION
+		Destroys the specified protection group snapshot(s).
+
+	.PARAMETER FlashArray
+		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
+
+	.PARAMETER Name
+		Protection group name.
+
+	.PARAMETER Session
+		Pure Storage FlashArray session created with Connect-PfaController.
+
+	.EXAMPLE
+		PS C:\> Remove-PfaProtectionGroupSnapshots -FlashArray 1.1.1.1 -Name TESTGROUP.SNAPSHOT -Session $S
+#>
+function Remove-PfaProtectionGroupSnapshots()
+{
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string[]] $Name,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+	)
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
+}
+
+<#
+	.SYNOPSIS
 		Eradicates a destroyed protection group and all of its snapshots.	
 
 	.DESCRIPTION
@@ -3982,6 +4044,50 @@ function Eradicate-PfaProtectionGroup()
 	
 	$Uri = "$PureStorageURIBase/pgroup/$Name"
 	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
+}
+
+<#
+	.SYNOPSIS
+		Eradicates a destroyed protection group and all of its snapshots.	
+
+	.DESCRIPTION
+		Eradicates a destroyed protection group and all of its snapshots.	
+
+	.PARAMETER FlashArray
+		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
+
+	.PARAMETER Name
+		Protection group name.
+
+	.PARAMETER Session
+		Pure Storage FlashArray session created with Connect-PfaController.
+
+	.EXAMPLE
+		PS C:\> Eradicate-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
+#>
+function Eradicate-PfaProtectionGroupSnapshots()
+{
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+	)
+	
+	try
+	{
+		$ProtectionGroup = $null
+		$ProtectionGroup = @{
+			eradicate = "true"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 <#
@@ -4031,6 +4137,62 @@ function Recover-PfaProtectionGroup
 	} | ConvertTo-Json
 	$Uri = "$PureStorageURIBase/pgroup/$Name"
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupRecover -WebSession $Session -ContentType "application/json"
+}
+
+<#
+	.SYNOPSIS
+		Recovers the contents of the specified volume. Set the parameter to recover. 
+	
+	.DESCRIPTION
+		Recovers the contents of the specified volume. Set the parameter to recover.
+	
+	.PARAMETER FlashArray
+		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
+	
+	.PARAMETER Name
+		Volume name.
+	
+	.PARAMETER Size
+		Creates a volume with the specified provisioned size.
+
+		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
+		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
+		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
+		to sectors.
+	
+	.PARAMETER Source
+		Creates a new volume from a snapshot as the source.
+	
+	.PARAMETER Session
+		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
+	
+	.EXAMPLE
+		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
+
+	.EXAMPLE
+		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
+#>
+function Recover-PfaProtectionGroupSnapshots
+{
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+	)
+	
+	try
+	{
+		$PGroupRecover = @{
+			action = "recover"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupRecover -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error	
+	}
 }
 
 <#
@@ -4467,6 +4629,82 @@ function Set-PfaProtectionGroupReplicationBlackout()
 	
 	$Uri = "$PureStorageURIBase/pgroup/$Name"
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetBlackout -WebSession $Session -ContentType "application/json"
+}
+
+<#
+	.SYNOPSIS
+		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
+	
+	.DESCRIPTION
+		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
+	
+	.PARAMETER FlashArray
+		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
+	
+	.PARAMETER Name
+		Volume name.
+	
+	.PARAMETER Size
+		Creates a volume with the specified provisioned size.
+
+		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
+		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
+		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
+		to sectors.
+	
+	.PARAMETER Source
+		Creates a new volume from a snapshot as the source.
+	
+	.PARAMETER Session
+		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
+	
+	.EXAMPLE
+		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
+
+	.EXAMPLE
+		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
+Restore-PfaProtectionGroupVolumeSnapshots –FlashArray $FA `
+										  –ProtectionGroup "CS-PERF-PURE-02:LT" `
+										  –VolumeSnaphots "CS-PERF-PURE-02:LT.2" `
+										  –Prefix TEST `
+										  –Session $FASession
+#>
+function Restore-PfaProtectionGroupVolumeSnapshots()
+{
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ProtectionGroup,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $SnapshotName,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Prefix,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Hostname,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+		
+	)
+	
+	try
+	{
+		$PGroupVolumes = Get-PfaProtectionGroup -FlashArray $FlashArray -Name $ProtectionGroup -Session $Session
+		$PGroupSnapshotsSet = $SnapshotName
+	
+		ForEach ($PGroupVolume in $PGroupVolumes)
+		{
+			For ($i = 0; $i -lt $PGroupVolume.volumes.Count; $i++)
+			{
+				$NewPGSnapshotVol = ($PGroupVolume.volumes[$i]).Replace($PGroupVolume.source + ":", $Prefix + "-")
+				$NewSource = ($PGroupSnapshotsSet + "." + $PGroupVolumes.volumes[$i]).Replace($PGroupVolume.source + ":", "")
+				New-PfaVolume -FlashArray $FlashArray -Name $NewPGSnapshotVol -Source $NewSource -Session $Session
+				If ($Hostname)
+				{
+					Connect-PfaVolume -FlashArray $FlashArray -Name $Hostname -Volume $NewPGSnapshotVol -Session $Session
+				}
+			}
+		}
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -6247,10 +6485,6 @@ function Update-PfaDirectoryService()
 
 #region TBD
 
-function Initialize-DiskRescan
-{
-}
-
 function Get-QuickFixEngineering
 {
 }
@@ -6261,11 +6495,15 @@ function Test-Configuration
 
 #endregion
 
-Export-ModuleMember -function Open-PureStorageGitHub -Alias opg
-Export-ModuleMember -function Get-WindowsPowerScheme
+Export-ModuleMember -function Open-PureStorageGitHub
+Set-Alias -Name opengit -Value Open-PureStorageGitHub -Scope Global
+Export-ModuleMember -function Get-WindowsPowerScheme -Alias power
+Set-Alias -Name power -Value Get-WindowsPowerScheme -Scope Global
 Export-ModuleMember -function Get-PfaApiVersion
 Export-ModuleMember -function Get-PfaApiToken
+Set-Alias -Name token -Value Get-PfaApiToken -Scope Global
 Export-ModuleMember -function Connect-PfaController
+Set-Alias -Name connect -Value Connect-PfaController -Scope Global
 Export-ModuleMember -function Disconnect-PfaController
 Export-ModuleMember -function New-PfaShadowCopy
 Export-ModuleMember -function Get-PfaShadowCopy
@@ -6310,6 +6548,7 @@ Export-ModuleMember -function Get-PfaProtectionGroupsTransferStatisics
 Export-ModuleMember -Function Get-PfaProtectionGroupsSnapshotSpace
 Export-ModuleMember -function Get-PfaProtectionGroupsSpace
 Export-ModuleMember -function Get-PfaProtectionGroup
+Export-ModuleMember -function Get-PfaProtectionGroupsSnapshots 
 Export-ModuleMember -function Get-PfaProtectionGroupPending
 Export-ModuleMember -function Get-PfaProtectionGroupPendingOnly
 Export-ModuleMember -function Get-PfaProtectionGroupSchedule
@@ -6323,6 +6562,11 @@ Export-ModuleMember -function Remove-PfaProtectionGroup
 Export-ModuleMember -function Eradicate-PfaProtectionGroup
 Export-ModuleMember -function Recover-PfaProtectionGroup
 Export-ModuleMember -function Rename-PfaProtectionGroup
+Export-ModuleMember -function Restore-PfaProtectionGroupVolumeSnapshots
+Set-Alias -Name restorepgsnap -Value Restore-PfaProtectionGroupVolumeSnapshots -Scope Global
+Export-ModuleMember -function Remove-PfaProtectionGroupSnapshots
+Export-ModuleMember -function Eradicate-PfaProtectionGroupSnapshots
+Export-ModuleMember -function Recover-PfaProtectionGroupSnapshots
 Export-ModuleMember -function Enable-PfaProtectionGroupReplication
 Export-ModuleMember -function Disable-PfaProtectionGroupReplication
 Export-ModuleMember -function Enable-PfaProtectionGroupSnapshots
@@ -6340,11 +6584,16 @@ Export-ModuleMember -Function Get-PfaVolumeSharedConnections
 Export-ModuleMember -Function Get-PfaVolumePrivateConnections
 Export-ModuleMember -Function Get-PfaVolumeDiff
 Export-ModuleMember -function New-PfaVolume
+Set-Alias -Name newvol -Value New-PfaVolume -Scope Global
 Export-ModuleMember -function Refresh-PfaVolume
 Export-ModuleMember -function New-PfaSnapshot
+Set-Alias -Name newsnap -Value New-PfaSnapshot -Scope Global
 Export-ModuleMember -function Remove-PfaVolume
+Set-Alias -Name delvol -Value Remove-PfaVolume -Scope Global
 Export-ModuleMember -function Remove-PfaSnapshot
+Set-Alias -Name delsnap -Value Remove-PfaSnapshot -Scope Global
 Export-ModuleMember -Function Eradicate-PfaVolume
+Set-Alias -Name flushvol -Value Eradicate-PfaVolume -Scope Global
 Export-ModuleMember -function Rename-PfaVolume
 Export-ModuleMember -function Resize-PfaVolume
 Export-ModuleMember -function Recover-PfaVolume
@@ -6352,14 +6601,18 @@ Export-ModuleMember -function Recover-PfaSnapshot
 Export-ModuleMember -function Get-PfaHosts
 Export-ModuleMember -function Get-PfaHost
 Export-ModuleMember -function New-PfaHost
+Set-Alias -Name newhost -Value New-PfaHost -Scope Global
 Export-ModuleMember -function Connect-PfaHost
+Set-Alias -Name connhost -Value Connect-PfaHost -Scope Global
 Export-ModuleMember -function Remove-PfaHost
-Export-ModuleMember -Function Connect-PfaVolume 
+Export-ModuleMember -Function Connect-PfaVolume
+Set-Alias -Name connvol -Value Connect-PfaVolume -Scope Global
 Export-ModuleMember -function Disconnect-PfaVolume
 Export-ModuleMember -function Get-PfaHostGroups
 Export-ModuleMember -function Get-PfaHostGroupVolumes
 Export-ModuleMember -function New-PfaHostGroup
 Export-ModuleMember -function Connect-PfaHostGroup
+Set-Alias -Name connhg -Value Connect-PfaHostGroup -Scope Global
 Export-ModuleMember -Function Add-PfaHostGroupHosts
 Export-ModuleMember -Function Remove-PfaHostGroupHosts
 Export-ModuleMember -Function Rename-PfaHostGroup
@@ -6407,6 +6660,7 @@ Export-ModuleMember -function Set-PfaUserPassword
 Export-ModuleMember -function Set-PfaUserPublicKey
 Export-ModuleMember -function Remove-PfaApiToken
 Export-ModuleMember -function Get-PfaDirectoryService
+Set-Alias -Name getad -Value Get-PfaDirectoryService -Scope Global
 Export-ModuleMember -function Get-PfaDirectoryServiceGroups
 Export-ModuleMember -function Get-PfaDirectoryServiceCertificate
 Export-ModuleMember -function Test-PfaDirectoryService
@@ -6415,163 +6669,6 @@ Export-ModuleMember -function Enable-PfaDirectoryService
 Export-ModuleMember -function Update-PfaDirectoryService
 Export-ModuleMember -function Get-HostBusAdapter
 Export-ModuleMember -function Register-PfaHostVolumes
+Set-Alias -Name scanhost -Value Register-PfaHostVolumes -Scope Global
 #Export-ModuleMember -function Get-QuickFixEngineering
 #Export-ModuleMember -function Test-Configuration
-
-
-#region FOO
-<#
-Export-ModuleMember -function Get-WindowsPowerScheme
-Export-ModuleMember -function Get-PfaApiVersion
-Export-ModuleMember -function Get-PfaApiToken
-Export-ModuleMember -function Connect-PfaController
-Export-ModuleMember -function Disconnect-PfaController
-Export-ModuleMember -function New-PfaShadowCopy
-Export-ModuleMember -function Get-PfaShadowCopy
-Export-ModuleMember -function Watch-PfaPerformance
-Export-ModuleMember -function Get-PfaHistoricalPerformance
-Export-ModuleMember -function Get-PfaSpace
-Export-ModuleMember -function Get-PfaConfiguration
-Export-ModuleMember -Function Get-PfaConnection
-Export-ModuleMember -function Get-PfaConsoleLock
-Export-ModuleMember -function Get-PfaPhoneHome
-Export-ModuleMember -function Get-PfaRemoteAssist
-Export-ModuleMember -function New-PfaConnection
-Export-ModuleMember -function Remove-PfaConnection
-Export-ModuleMember -function Get-PfaArray
-Export-ModuleMember -Function Set-PfaBanner
-Export-ModuleMember -Function Set-PfaIdleTimeout
-Export-ModuleMember -Function Set-PfaName
-Export-ModuleMember -Function Set-PfaNtpServer
-Export-ModuleMember -Function Set-PfaProxy
-Export-ModuleMember -Function Set-PfaRelayHost
-Export-ModuleMember -Function Set-PfaScsiTimeout
-Export-ModuleMember -Function Set-PfaSenderDomain
-Export-ModuleMember -Function Set-PfaSyslogServer
-Export-ModuleMember -Function Enable-PfaConsoleLock
-Export-ModuleMember -Function Disable-PfaConsoleLock
-Export-ModuleMember -Function Enable-PfaPhonehome
-Export-ModuleMember -Function Disable-PfaPhonehome
-Export-ModuleMember -Function Send-PfaPhonehomeLogs
-Export-ModuleMember -Function Connect-PfaRemoteAssist
-Export-ModuleMember -Function Disconnect-PfaRemoteAssist
-Export-ModuleMember -function Get-PfaVolumes
-Export-ModuleMember -function Get-PfaPendingVolumes
-Export-ModuleMember -function Get-PfaPendingOnlyVolumes
-Export-ModuleMember -function Get-PfaSnapshots
-Export-ModuleMember -Function Get-PfaVolumesSpace
-Export-ModuleMember -function Get-PfaProtectionGroups
-Export-ModuleMember -function Get-PfaProtectionGroupsPending
-Export-ModuleMember -function Get-PfaProtectionGroupsPendingOnly
-Export-ModuleMember -function Get-PfaProtectionGroupsSchedule
-Export-ModuleMember -function Get-PfaProtectionGroupsRetentionPolicy
-Export-ModuleMember -function Get-PfaProtectionGroupsTransferStatisics
-Export-ModuleMember -Function Get-PfaProtectionGroupsSnapshotSpace
-Export-ModuleMember -function Get-PfaProtectionGroupsSpace
-Export-ModuleMember -function Get-PfaProtectionGroup
-Export-ModuleMember -function Get-PfaProtectionGroupPending
-Export-ModuleMember -function Get-PfaProtectionGroupPendingOnly
-Export-ModuleMember -function Get-PfaProtectionGroupSchedule
-Export-ModuleMember -function Get-PfaProtectionGroupRetentionPolicy
-Export-ModuleMember -function Get-PfaProtectionGroupTransferStatisics
-Export-ModuleMember -Function Get-PfaProtectionGroupSnapshotSpace
-Export-ModuleMember -function Get-PfaProtectionGroupSpace
-Export-ModuleMember -function New-PfaProtectionGroupSnapshot
-Export-ModuleMember -function New-PfaProtectionGroup
-Export-ModuleMember -function Remove-PfaProtectionGroup
-Export-ModuleMember -function Eradicate-PfaProtectionGroup
-Export-ModuleMember -function Recover-PfaProtectionGroup
-Export-ModuleMember -function Rename-PfaProtectionGroup
-Export-ModuleMember -function Enable-PfaProtectionGroupReplication
-Export-ModuleMember -function Disable-PfaProtectionGroupReplication
-Export-ModuleMember -function Enable-PfaProtectionGroupSnapshots
-Export-ModuleMember -function Disable-PfaProtectionGroupSnapshots
-Export-ModuleMember -function Add-PfaProtectionGroupMembers
-Export-ModuleMember -function Remove-PfaProtectionGroupMembers
-Export-ModuleMember -function Update-PfaProtectionGroupReplication
-Export-ModuleMember -Function Set-PfaProtectionGroupReplicationBlackout
-Export-ModuleMember -Function Watch-PfaVolumePerformance
-Export-ModuleMember -Function Get-PfaVolumeSnapshots
-Export-ModuleMember -Function Get-PfaVolume
-Export-ModuleMember -Function Get-PfaHistoricalVolumePerformance
-Export-ModuleMember -Function Get-PfaVolumeSpace
-Export-ModuleMember -Function Get-PfaVolumeSharedConnections
-Export-ModuleMember -Function Get-PfaVolumePrivateConnections
-Export-ModuleMember -Function Get-PfaVolumeDiff
-Export-ModuleMember -function New-PfaVolume
-Export-ModuleMember -function Refresh-PfaVolume
-Export-ModuleMember -function New-PfaSnapshot
-Export-ModuleMember -function Remove-PfaVolume
-Export-ModuleMember -function Remove-PfaSnapshot
-Export-ModuleMember -Function Eradicate-PfaVolume
-Export-ModuleMember -function Rename-PfaVolume
-Export-ModuleMember -function Resize-PfaVolume
-Export-ModuleMember -function Recover-PfaVolume
-Export-ModuleMember -function Recover-PfaSnapshot
-Export-ModuleMember -function Get-PfaHosts
-Export-ModuleMember -function Get-PfaHost
-Export-ModuleMember -function New-PfaHost
-Export-ModuleMember -function Connect-PfaHost
-Export-ModuleMember -function Remove-PfaHost
-Export-ModuleMember -Function Connect-PfaVolume
-Export-ModuleMember -function Disconnect-PfaVolume
-Export-ModuleMember -function Get-PfaHostGroups
-Export-ModuleMember -function Get-PfaHostGroupVolumes
-Export-ModuleMember -function New-PfaHostGroup
-Export-ModuleMember -function Connect-PfaHostGroup
-Export-ModuleMember -Function Add-PfaHostGroupHosts
-Export-ModuleMember -Function Remove-PfaHostGroupHosts
-Export-ModuleMember -Function Rename-PfaHostGroup
-Export-ModuleMember -Function Update-PfaHostGroupHosts
-Export-ModuleMember -function Remove-PfaHostGroup
-Export-ModuleMember -function Disconnect-PfaHostGroupVolume
-Export-ModuleMember -Function New-PfaProtectionGroupSnapshot
-Export-ModuleMember -function Get-PfaPorts
-Export-ModuleMember -function Get-PfaInitiators
-Export-ModuleMember -function Enable-PfaPorts
-Export-ModuleMember -function Disable-PfaPorts
-Export-ModuleMember -function Get-PfaAlerts
-Export-ModuleMember -function Get-PfaAlertRecipient
-Export-ModuleMember -function Test-PfaAlertRecipient
-Export-ModuleMember -function Enable-PfaAlertRecipient
-Export-ModuleMember -function Disable-PfaAlertRecipient
-Export-ModuleMember -function Remove-PfaAlertRecipient
-Export-ModuleMember -function New-PfaAlertRecipient
-Export-ModuleMember -function Get-PfaMessages
-Export-ModuleMember -function Hide-PfaMessage
-Export-ModuleMember -function Show-PfaMessage
-Export-ModuleMember -function Get-PfaSnmp
-Export-ModuleMember -function Get-PfaSnmpManager
-Export-ModuleMember -function New-PfaSnmpv3Manager
-Export-ModuleMember -function New-PfaSnmpv2cManager
-Export-ModuleMember -function Update-PfaSnmpManager
-Export-ModuleMember -function Remove-PfaSnmpManager
-Export-ModuleMember -function Test-PfaSnmpManager
-Export-ModuleMember -function Get-PfaSslCert
-Export-ModuleMember -function Export-PfaSslCert
-Export-ModuleMember -function Get-PfaDns
-Export-ModuleMember -function Set-PfaDns
-Export-ModuleMember -function Get-PfaNetwork
-Export-ModuleMember -function Get-PfaNetworkInterface
-Export-ModuleMember -function Get-PfaHardware
-Export-ModuleMember -function Get-PfaHardwareComponent
-Export-ModuleMember -function Show-PfaHardwareLed
-Export-ModuleMember -function Get-PfaDrives
-Export-ModuleMember -function Get-PfaDrive
-Export-ModuleMember -function Get-PfaUsers
-Export-ModuleMember -function Get-PfaUser
-Export-ModuleMember -function New-PfaApiToken
-Export-ModuleMember -function Clear-PfaPermissionCache
-Export-ModuleMember -function Set-PfaUserPassword
-Export-ModuleMember -function Set-PfaUserPublicKey
-Export-ModuleMember -function Remove-PfaApiToken
-Export-ModuleMember -function Get-PfaDirectoryService
-Export-ModuleMember -function Get-PfaDirectoryServiceGroups
-Export-ModuleMember -function Get-PfaDirectoryServiceCertificate
-Export-ModuleMember -function Test-PfaDirectoryService
-Export-ModuleMember -function Disable-PfaDirectoryService
-Export-ModuleMember -function Enable-PfaDirectoryService
-Export-ModuleMember -function Update-PfaDirectoryService
-Export-ModuleMember -function Get-HostBusAdapter
-#>
-#endregion
