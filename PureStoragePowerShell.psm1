@@ -5,7 +5,7 @@
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.2.1.302
+	 Version:		2.3.0.305
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -32,49 +32,26 @@
 #Requires -Version 3
 
 #region Helper-Functions
-<#
-	.SYNOPSIS
-		Helper function to display error message(s). 
-#>
+
 function Display-Error()
 {
 	$Err = ConvertFrom-Json $_.ErrorDetails
-	Write-Host "ERROR:" $Err.msg "(" $Err.ctx ")" -ForegroundColor Red
+	Write-Host "Pure Storage Error:" $Err.msg "(" $Err.ctx ")" -ForegroundColor Red
 }
 
 
 #endregion
 
 #region Miscellenaous-Cmdlets
-<#
-	.SYNOPSIS
-		Access the Github repository for the Pure Storage PowerShell Toolkit.
-	
-	.DESCRIPTION
-		Using this cmdlet will open up the default web browser and navigate to the Pure Storage
-		Github repository.
-	
-	.EXAMPLE
-		PS C:\> Open-PureStorageGitHub
-#>
+
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Open-PureStorageGitHub
 {
 	$link = "https://github.com/purestorage/PowerShell-Toolkit"
 	$browserProcess = [System.Diagnostics.Process]::Start($link)
 }
 
-<#
-	.SYNOPSIS
-		Retrieve the currently active Windows Server power scheme.
-	
-	.DESCRIPTION
-		Determine what the current Windows Server power scheme that is being used to ensure the host
-		is optimally configured for performance.
-	
-	.EXAMPLE
-		PS C:\> Get-WindowsPowerScheme
-
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-WindowsPowerScheme()
 {
 	[CmdletBinding()]
@@ -85,19 +62,7 @@ function Get-WindowsPowerScheme()
 	Write-Host $ComputerName "is set to" $PowerScheme.ElementName
 }
 
-<#
-	.SYNOPSIS
-		Set the queue depth for the QLogic HBA (ql2300.sys).
-	
-	.DESCRIPTION
-		Set the queue depth for the QLogic HBA (ql2300.sys).
-	
-	.PARAMETER Qd
-		Value for queue depth.		
-
-	.EXAMPLE
-		PS C:\> Set-QueueDepth -Qd 64
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-QueueDepth()
 {
 	[CmdletBinding()]
@@ -126,35 +91,14 @@ function Set-QueueDepth()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Retrieves the queue depth for the QLogic HBA (ql2300.sys).
-	
-	.DESCRIPTION
-		Retrieves the queue depth for the QLogic HBA (ql2300.sys).
-	
-	.EXAMPLE
-		PS C:\> Get-QueueDepth
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-QueueDepth()
 {
 	$DriverParam = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Services\ql2300\Parameters\Device\"
 	"Queue Depth is " + $DriverParam.DriverParameter
 }
 
-<#
-	.SYNOPSIS
-		Retrieves the HBAs installed on the specific computer. 
-
-	.DESCRIPTION
-		Retrieves the HBAs installed on the specific computer. 
-	
-	.PARAMETER ComputernName
-		Server name to retrieve Host Bus Adapater (HBA) information.
-	
-	.EXAMPLE
-		PS C:\> Get-HBAObject -ComputerName MyServer
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-HostBusAdapter()
 {
 	[CmdletBinding()]
@@ -182,19 +126,7 @@ function Get-HostBusAdapter()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Rescans host for newly attached Pure Storage volumes.
-
-	.DESCRIPTION
-		Rescans host for newly attached Pure Storage volumes.
-	
-	.PARAMETER ComputernName
-		Server name to rescan for newly attached volumes.
-	
-	.EXAMPLE
-		PS C:\> Register-PureStorageVolumes -ComputerName MyServer
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 Function Register-PfaHostVolumes ()
 {
 	[CmdletBinding()]
@@ -232,22 +164,8 @@ Function Register-PfaHostVolumes ()
 #endregion
 
 #region FA-Authentication-Cmdlets
-<#
-	.SYNOPSIS
-		Retrieve the REST API version from the Pure Storage FlashArray.
-	
-	.DESCRIPTION
-		The Get-PfaApiVersion cmdlet queries the Pure Storage FlashArray to retrieve the highest REST API version that has been installed on the FlashArray. This cmdlet can be used as standalone but is only used with the toolkit from the Connect-PfaController cmdlet in order to dynamically set the $PureStorageUriBase global variable. 
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaApiVersion -FlashArray 1.1.1.1 -Session $MySession
-#>
+
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaApiVersion()
 {
 	[CmdletBinding()]
@@ -270,36 +188,7 @@ function Get-PfaApiVersion()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Generates a REST API token that can be used to create a REST session.
-
-	.DESCRIPTION
-		A detailed description of the Get-PfaAPIToken function.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Username
-		Purity user login name used to generate the REST API token. Sometimes referred to as sAMAccountName.
-
-	.PARAMETER Password
-		Purity user login password used to generate the REST API token.
-
-	.PARAMETER RESTAPI
-		What REST API version to target. Purity Operating Environment has the following released versions: 1.0, 1.1, 1.2, 1.3. The 
-		default is 1.3 the latest version of the REST API.
-
-		NOTE: This parameter can be set when retrieving an API Token but once a connection is made to a Pure Storage FlashArray using the Connect-PfaController cmdlet the latest REST API will automatically be used in subsequent cmdlets.
-
-	.EXAMPLE
-		PS C:\> $MyToken = Get-PfaAPIToken -FlashArray 1.1.1.1 -Username pureuser -Password pureuser -RESTAPI 1.2
-		This example shows how to get an API Token and assign it to the $MyToken variable for use with the Connect-PfaController cmdlet.
-
-	.EXAMPLE
-		PS C:\Users\barkz> $MySession = Get-PfaAPIToken -FlashArray 10.21.8.82 -Username pureuser -Password pureuser -RESTAPI 1.2 | Connect-PfaController -FlashArray 10.21.8.82
-		This example shows how to pass a retrieved API Token using ValueFromPipelineByPropertyName to Connect-PfaController cmdlet and assigning a new session variable to $MySession.
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaApiToken()
 {
 	[CmdletBinding()]
@@ -339,28 +228,7 @@ function Get-PfaApiToken()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Connects to the Pure Storage FlashArray.
-	
-	.DESCRIPTION
-		Using the API Token established from the Get-PfaApiToken cmdlet a session is established to the FlashArray. 
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER API_Token
-		Retrieved API Token for a given user on the Pure Storage FlashArray.
-
-	.EXAMPLE
-		PS C:\> $MySession = Connect-PfaController -FlashArray 1.1.1.1 -API_Token $MyToken.api_token
-		This example shows how to set the $MySession variable by passing the $MyToken.api_token.
-	
-	.EXAMPLE
-		PS C:\Users\barkz> $MySession = Get-PfaAPIToken -FlashArray 10.21.8.82 -Username pureuser -Password pureuser -RESTAPI 1.2 | Connect-PfaController -FlashArray 10.21.8.82
-		This example shows how to pass a retrieved API Token using ValueFromPipelineByPropertyName to Connect-PfaController cmdlet and assigning a new session variable to $MySession.
-
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaController()
 {
 	[CmdletBinding()]
@@ -387,23 +255,7 @@ function Connect-PfaController()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Disconnect from a Pure Storage FlashArray session.
-	
-	.DESCRIPTION
-		Disconnect from an established session with the Pure Storage FlashArray. Each individual session needs to be disconnected to ensure all sessions have been deleted.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\>  Disconnect-PfaController -FlashArray 1.1.1.1 -Session $MySession
-	
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disconnect-PfaController()
 {
 	[CmdletBinding()]
@@ -426,32 +278,10 @@ function Disconnect-PfaController()
 }
 
 #endregion
-	
+
 #region FA-VSS-Cmdlets
-<#
-	.SYNOPSIS
-		Exposes a Pure Storage created Volume Shadow Copy Service (VSS) snapshot. 
-	
-	.DESCRIPTION
-		A detailed description of the Get-PfaShadowCopy function. These cmdlets are meant to be
-		examples of automating Diskshadow through Windows PowerShell, these examples can be
-		enhanced to support greater flexibility and more complicated use cases.
-	
-	.PARAMETER ScriptName
-		Assigned name of the script that will be autogenerated. Default is PUREVSS-SNAP.
-		
-	.PARAMETER MetadataFile
-		The metadata file (.cab) created during a backup operation which contains the details about the volume shadow copy.
-	
-	.PARAMETER ShadowCopyAlias
-		A simple name to alias the Shadow Copy ID.
 
-	.PARAMETER ExposeAs
-		A drive letter on the host sytem to expose the VSS snapshot. Eg. X:
-
-	.EXAMPLE
-		PS C:\> Get-PfaShadowCopy -ScriptName SampleScript -MetadataFile SampleMetaDataFile -ShadowCopyAlias SampleAlias -ExposeAs X:
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaShadowCopy()
 {
 	[CmdletBinding()]
@@ -472,37 +302,7 @@ function Get-PfaShadowCopy()
 	Remove-Item $dsh
 }
 
-<#
-	.SYNOPSIS
-		Initiate a new Microsoft Volume Shadow Copy Service (VSS) snapshot.
-	
-	.DESCRIPTION
-		The New-PfaShadowCopy cmdlet uses Microsoft Diskshadow utility to initiate a volume shadow
-		copy service snapshot using the Pure Storage VSS Hardware Provider. The GUID for the Pure
-		Storage VSS Provider is {781c006a-5829-4a25-81e3-d5e43bd005ab} and should be used to ensure
-		that the proper provider is used. These cmdlets are meant to be examples of automating 
-		Diskshadow through Windows PowerShell, these examples can be enhanced to support greater 
-		flexibility and more complicated use cases.
-	
-	.PARAMETER Volume
-		Identification of the Pure Storage volume that needs to be quiesced. Eg. F:
-
-	.PARAMETER ScriptName
-		Assigned name of the script that will be autogenerated. Default is PUREVSS-SNAP.
-		
-	.PARAMETER MetadataFile
-		The metadata file (.cab) created during a backup operation which contains the details about the volume shadow copy.
-	
-	.PARAMETER ShadowCopyAlias
-		A simple name to alias the Shadow Copy ID.
-
-	.PARAMETER VerboseMode
-		Display all executed details for the volume shadow copy service operations.
-
-	.EXAMPLE
-		PS C:\> New-PfaShadowCopy -Volume VOLUME1 -Scriptname MyScript -MetadataFile SampleMetadata -ShadowCopyAlias SampleAlias -VerboseMode On
-	
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaShadowCopy()
 {
 	[CmdletBinding()]
@@ -537,33 +337,8 @@ function New-PfaShadowCopy()
 #endregion
 
 #region FA-Array-Cmdlets
-<#
-	.SYNOPSIS
-		Displays the following real-time performance data.
-	
-	.DESCRIPTION
-		Latency
-			usec_per_read_op - average arrival-to-completion time, measured in microseconds, for a host read operation.
-			usec_per_write_op - average arrival-to-completion time, measured in microseconds, for a host write operation.
-			queue_depth - average number of queued I/O requests.
 
-		IOPS
-			reads_per_sec - number of read requests processed per second.
-			writes_per_sec - number of write requests processed per second.
-		
-		Bandwidth
-			input_per_sec - number of bytes read per second.
-			output_per_sec - number of bytes written per second.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Watch-PfaPerformance -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Watch-PfaPerformance()
 {
 	[CmdletBinding()]
@@ -576,22 +351,7 @@ function Watch-PfaPerformance()
 	
 }
 
-<#
-	.SYNOPSIS
-		List FlashArray attributes.
-	
-	.DESCRIPTION
-		List FlashArray attributes.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaArray -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaArray
 {
 	[CmdletBinding()]
@@ -609,23 +369,7 @@ function Get-PfaArray
 	}
 }
 
-<#
-	.SYNOPSIS
-		Displays the historical performance data.
-	
-	.DESCRIPTION
-		Display historical performance data at a specified resolution. 
-		Valid historical values are: 1h, 3h, 24h, 7d, 30d, 90d, 1y
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaArrayConfiguration -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHistoricalPerformance()
 {
 	[CmdletBinding()]
@@ -638,23 +382,7 @@ function Get-PfaHistoricalPerformance()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Retrieves all FlashArray configuration information. The same details can be retrieved via
-		the Pure Storage FlashArray Web Management Interface (GUI) from the System tab.
-	
-	.DESCRIPTION
-		Provides detailed information about the configuration of the FlashArray.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaConfiguration -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaConfiguration
 {
 	[CmdletBinding()]
@@ -696,23 +424,7 @@ function Get-PfaConfiguration
 	}
 }
 
-<#
-	.SYNOPSIS
-		Retrieves usable physical storage information.
-	
-	.DESCRIPTION
-		Displays the amount of usable physical storage on the array and the amount of storage occupied 
-		by data and metadata.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaSpace -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaSpace
 {
 	[CmdletBinding()]
@@ -725,22 +437,7 @@ function Get-PfaSpace
 	Invoke-RestMethod -Method GET -Uri $uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Lists connected arrays.
-	
-	.DESCRIPTION
-		Lists connected arrays.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaConnection -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaConnection
 {
 	[CmdletBinding()]
@@ -753,22 +450,7 @@ function Get-PfaConnection
 	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Displays the status of the console lock.
-	
-	.DESCRIPTION
-		Displays the status of the console lock.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaConsoleLock -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaConsoleLock
 {
 	[CmdletBinding()]
@@ -781,22 +463,7 @@ function Get-PfaConsoleLock
 	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Lists information about the status of the transmission logs for the phonehome facility.
-	
-	.DESCRIPTION
-		Lists information about the status of the transmission logs for the phonehome facility.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaPhoneHome -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaPhoneHome
 {
 	[CmdletBinding()]
@@ -809,22 +476,7 @@ function Get-PfaPhoneHome
 	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Lists information about the status (enabled or disabled) of a remote assist session.
-	
-	.DESCRIPTION
-		Lists information about the status (enabled or disabled) of a remote assist session.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaRemoteAssist -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaRemoteAssist
 {
 	[CmdletBinding()]
@@ -837,34 +489,7 @@ function Get-PfaRemoteAssist
 	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Creates a new connection to a target array.
-	
-	.DESCRIPTION
-		Creates a new connection to a target array.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER TargetFlashArray
-		The address of the array to be connected.
-	
-	.PARAMETER ConnectionKey
-		The connection_key of the array to be connected.
-	
-	.PARAMETER ReplicationAddress (OPTIONAL)
-		The replication address of the array to be connected.
-	
-	.PARAMETER Type (PRESET)
-		The type(s) of connection desired. The only option supported in this version is 'replication'.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaConnection -FlashArray 1.1.1.1 -TargetFlashArray 2.2.2.2 -ConnectionKey <Key> -ReplicationAddress 3.3.3.3 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaConnection
 {
 	[CmdletBinding()]
@@ -889,22 +514,7 @@ function New-PfaConnection
 	Invoke-RestMethod -Method POST -Uri $Uri -Body $ArrayConnection -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Removes a connection to a target array.
-	
-	.DESCRIPTION
-		Removes a new connection to a target array.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		The address of the array to be disconnected.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaConnection -FlashArray 1.1.1.1 -Name DEMOARRAY -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaConnection
 {
 	[CmdletBinding()]
@@ -918,27 +528,7 @@ function Remove-PfaConnection
 	Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Sets a common "message of the day" (MOTD) that is sent to all Purity users. The banner message 
-		is displayed in the login pane of the Purity GUI and via SSH after users log in.
-	
-	.DESCRIPTION
-		Sets a common "message of the day" (MOTD) that is sent to all Purity users. The banner message 
-		is displayed in the login pane of the Purity GUI and via SSH after users log in.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Banner
-		Message of the day (MOTD)
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaBanner -FlashArray 1.1.1.1 -Banner "This is my test banner" -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaBanner
 {
 	[CmdletBinding()]
@@ -952,29 +542,7 @@ function Set-PfaBanner
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Sets the idle time limit, in minutes, of the Purity GUI and CLI sessions. 
-	
-	.DESCRIPTION
-		Sets the idle time limit, in minutes, of the Purity GUI and CLI sessions. Valid values are between
-		5 and 180 minutes. The default timeout value is 30 minutes. Specifying a value of zero disables the 
-		automatic log-off feature. Changes made to the idle_timeout value do not apply to existing Purity 
-		sessions.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER IdleTimeout
-		Valid values are between 5 and 180 minutes. The default timeout value is 30 minutes. Specifying a 
-		value of zero disables the automatic log-off feature.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaIdleTimeout -FlashArray 1.1.1.1 -IdleTimeout 60 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaIdleTimeout
 {
 	[CmdletBinding()]
@@ -988,25 +556,7 @@ function Set-PfaIdleTimeout
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Renames the array.
-	
-	.DESCRIPTION
-		Renames the array.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		New FlashArray name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaName -FlashArray 1.1.1.1 -Name MyFlashArray -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaName
 {
 	[CmdletBinding()]
@@ -1020,27 +570,7 @@ function Set-PfaName
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Specifies alternate NTP servers, by IP address or hostname, assigned as the array source for 
-		reference time.
-	
-	.DESCRIPTION
-		Specifies alternate NTP servers, by IP address or hostname, assigned as the array source for 
-		reference time. Supersedes any previous NTP server assignments.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Servers
-		One more more new NTP Server hostname or IP address. Separated by commas.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaNtpServer -FlashArray 1.1.1.1 -Name MyNtpServer -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaNtpServer
 {
 	[CmdletBinding()]
@@ -1058,27 +588,7 @@ function Set-PfaNtpServer
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddNtpServer -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Sets the proxy host for the phonehome facility when HTTPS is the phonehome protocol.
-	
-	.DESCRIPTION
-		Sets the proxy host for the phonehome facility when HTTPS is the phonehome protocol (the phonehome 
-		facility itself determines which protocol to use). The format for the value is https://HOSTNAME:PORT, 
-		where HOSTNAME is the name of the proxy host and PORT is the TCP/IP port number used by the proxy host.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		New proxy (HOSTNAME:PORT).
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaProxy -FlashArray 1.1.1.1 -Name MyProxy -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaProxy
 {
 	[CmdletBinding()]
@@ -1092,28 +602,7 @@ function Set-PfaProxy
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Sets the hostname or IP address of the electronic mail relay server.
-	
-	.DESCRIPTION
-		Sets the hostname or IP address of the electronic mail relay server currently being used
-		as a forwarding point for email alerts generated by the array. To set Purity to send alert 
-		email messages directly to recipient addresses rather than routing them via a relay (mail 
-		forwarding) server, set relayhost to an empty string.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		New relay hostname or IP address.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaRelayHost -FlashArray 1.1.1.1 -Name MyProxy -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaRelayHost
 {
 	[CmdletBinding()]
@@ -1127,31 +616,7 @@ function Set-PfaRelayHost
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Changes the amount of time, in seconds, that can lapse during an I/O interruption before the 
-		target ports log out of the fabric. The default timeout value is 60 seconds.
-	
-	.DESCRIPTION
-		Changes the amount of time, in seconds, that can lapse during an I/O interruption before the 
-		target ports log out of the fabric. The default timeout value is 60 seconds.
-
-		Changing the default timeout value may cause an initiator to mistakenly interpret the status 
-		of the FlashArray as failed or generate a host timeout. Contact the Pure Storage Support team 
-		before you change the scsi_timeout value
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Timeout
-		New relay hostname or IP address.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaScsiTimeout -FlashArray 1.1.1.1 -Timeout MyProxy -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaScsiTimeout
 {
 	[CmdletBinding()]
@@ -1165,25 +630,7 @@ function Set-PfaScsiTimeout
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Sets the domain name from which Purity sends email alert messages.
-	
-	.DESCRIPTION
-		Sets the domain name from which Purity sends email alert messages.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		New domain name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaSenderDomain -FlashArray 1.1.1.1 -Name MyDomain -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaSenderDomain
 {
 	[CmdletBinding()]
@@ -1197,26 +644,7 @@ function Set-PfaSenderDomain
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Specifies the remote syslog servers for delivering notifications.
-	
-	.DESCRIPTION
-		Specifies the remote syslog servers for delivering notifications. The format for the value is 
-		tcp://HOST:PORT or udp://HOST:PORT.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Servers
-		One or more syslogserver names. Separated with commas.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaSyslogServer -FlashArray 1.1.1.1 -Name MySyslogServer, MySyslogServer1, MySyslogServer2 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaSyslogServer
 {
 	[CmdletBinding()]
@@ -1234,22 +662,7 @@ function Set-PfaSyslogServer
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddSyslogServer -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Enables root login through the console.
-	
-	.DESCRIPTION
-		Enables (true) the console lock which prevents the root user from logging in through the system console.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaConsoleLock -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaConsoleLock
 {
 	[CmdletBinding()]
@@ -1262,22 +675,7 @@ function Enable-PfaConsoleLock
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
 }
 
-<#
-	.SYNOPSIS
-		Disables root login through the console.
-	
-	.DESCRIPTION
-		Disables (false) the console lock which prevents the root user from logging in through the system console.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaConsoleLock -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaConsoleLock
 {
 	[CmdletBinding()]
@@ -1290,22 +688,7 @@ function Disable-PfaConsoleLock
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disables phonehome actions.
-	
-	.DESCRIPTION
-		Enables (true) the automatic hourly transmission of array logs to the Pure Storage Support team.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaPhonehome -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaPhonehome
 {
 	[CmdletBinding()]
@@ -1318,22 +701,7 @@ function Enable-PfaPhonehome
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disables phonehome actions.
-	
-	.DESCRIPTION
-		Disables (false) the automatic hourly transmission of array logs to the Pure Storage Support team.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disable-PfaPhonehome -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaPhonehome
 {
 	[CmdletBinding()]
@@ -1346,26 +714,7 @@ function Disable-PfaPhonehome
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Transmits event logs stored in the array to the Pure Storage Support team via the phonehome channel. 
-	
-	.DESCRIPTION
-		Transmits event logs stored in the array to the Pure Storage Support team via the phonehome channel. Specify the 
-		phonehome log time period as any of the following: send_all, send_today, send_yesterday, cancel.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER TimePeriod
-		Specify the phonehome log time period as any of the following: send_all, send_today, send_yesterday, cancel.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Send-PfaPhonehome -FlashArray 1.1.1.1 -TimePeriod All -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Send-PfaPhonehomeLogs()
 {
 	[CmdletBinding()]
@@ -1387,22 +736,7 @@ function Send-PfaPhonehomeLogs()
 	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Enables a remote assist session.
-	
-	.DESCRIPTION
-		Enables (true) the automatic hourly transmission of array logs to the Pure Storage Support team.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Connect-PfaRemoteAssist -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaRemoteAssist
 {
 	[CmdletBinding()]
@@ -1415,22 +749,7 @@ function Connect-PfaRemoteAssist
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disables a remote assist session.
-	
-	.DESCRIPTION
-		Disables (false) the automatic hourly transmission of array logs to the Pure Storage Support team.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disconnect-PfaRemoteAssist -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disconnect-PfaRemoteAssist
 {
 	[CmdletBinding()]
@@ -1446,24 +765,11 @@ function Disconnect-PfaRemoteAssist
 #endregion
 
 #region FA-Volumes-Snapshots-Cmdlets
-<#
-	.SYNOPSIS
-		Lists all volumes.
-	
-	.DESCRIPTION
-		Lists all volumes.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumes -FlashArray 1.1.1.1 -Session $MySession
-#>
+
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumes()
 {
+
 	[CmdletBinding()]
 	Param (
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
@@ -1473,22 +779,7 @@ function Get-PfaVolumes()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists all volumes with pending eradication time remaining.
-	
-	.DESCRIPTION
-		Lists all volumes with pending eradication time remaining.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaPendingVolumes -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaPendingVolumes()
 {
 	[CmdletBinding()]
@@ -1500,22 +791,7 @@ function Get-PfaPendingVolumes()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists only volumes pending eradication.
-	
-	.DESCRIPTION
-		Lists only volumes pending eradication.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaPendingOnlyVolumes -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaPendingOnlyVolumes()
 {
 	[CmdletBinding()]
@@ -1527,22 +803,7 @@ function Get-PfaPendingOnlyVolumes()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists all snapshots (true).
-	
-	.DESCRIPTION
-		Lists all snapshots (true).
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaSnapshots -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaSnapshots()
 {
 	[CmdletBinding()]
@@ -1554,22 +815,7 @@ function Get-PfaSnapshots()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists size and space consumption attributes for each volume.
-	
-	.DESCRIPTION
-		Lists size and space consumption attributes for each volume.
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumeSpace -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumesSpace()
 {
 	[CmdletBinding()]
@@ -1581,36 +827,7 @@ function Get-PfaVolumesSpace()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Displays the following real-time performance data.
-	
-	.DESCRIPTION
-		Latency
-			usec_per_read_op - average arrival-to-completion time, measured in microseconds, for a host read operation.
-			usec_per_write_op - average arrival-to-completion time, measured in microseconds, for a host write operation.
-			queue_depth - average number of queued I/O requests.
-
-		IOPS
-			reads_per_sec - number of read requests processed per second.
-			writes_per_sec - number of write requests processed per second.
-		
-		Bandwidth
-			input_per_sec - number of bytes read per second.
-			output_per_sec - number of bytes written per second.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Watch-PfaVolumePerformance -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Watch-PfaVolumePerformance()
 {
 	[CmdletBinding()]
@@ -1624,26 +841,7 @@ function Watch-PfaVolumePerformance()
 	
 }
 
-<#
-	.SYNOPSIS
-		Displays the historical performance data for a volume.
-	
-	.DESCRIPTION
-		Display historical performance data at a specified resolution. 
-		Valid historical values are: 1h, 3h, 24h, 7d, 30d, 90d, 1y
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaHistoricalVolumePerformance -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHistoricalVolumePerformance()
 {
 	[CmdletBinding()]
@@ -1657,25 +855,7 @@ function Get-PfaHistoricalVolumePerformance()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists specific volume.
-	
-	.DESCRIPTION
-		Lists specific volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolume()
 {
 	[CmdletBinding()]
@@ -1688,25 +868,7 @@ function Get-PfaVolume()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists specific volume snapshots.
-	
-	.DESCRIPTION
-		Lists specific volume snapshots.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumeSnapshots -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumeSnapshots()
 {
 	[CmdletBinding()]
@@ -1719,25 +881,7 @@ function Get-PfaVolumeSnapshots()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists specific volume space information.
-	
-	.DESCRIPTION
-		Lists specific volume space information.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumeSpace -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumeSpace()
 {
 	[CmdletBinding()]
@@ -1750,25 +894,7 @@ function Get-PfaVolumeSpace()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists shared connections for a specific volume.
-	
-	.DESCRIPTION
-		Lists shared connections for a specific volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumeSharedConnections -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumeSharedConnections()
 {
 	[CmdletBinding()]
@@ -1781,25 +907,7 @@ function Get-PfaVolumeSharedConnections()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists private connections for a specific volume.
-	
-	.DESCRIPTION
-		Lists private connections for a specific volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumePrivateConnections -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumePrivateConnections()
 {
 	[CmdletBinding()]
@@ -1812,35 +920,7 @@ function Get-PfaVolumePrivateConnections()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists block differences for the specified volume.
-	
-	.DESCRIPTION
-		Lists block differences for the specified volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume or snapshot name to be used as the base for the diff. If a base volume or snapshot is not 
-		specified, all mapped blocks for the volume are returned.
-	
-	.PARAMETER BlockSize
-		Granularity, in bytes, at which to compare.
-
-	.PARAMETER Length
-		Length of the region, in bytes, to compare.
-
-	.PARAMETER Offset
-		Absolute offset, in bytes, of the region to compare. Must be a multiple of block_size.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaVolumePrivateConnections -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolumeDiff()
 {
 	[CmdletBinding()]
@@ -1863,39 +943,7 @@ function Get-PfaVolumeDiff()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.DESCRIPTION
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaVolume()
 {
 	[CmdletBinding()]
@@ -1924,28 +972,7 @@ function New-PfaVolume()
 	Invoke-RestMethod -Method Post -Uri $Uri -Body $Volume -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Overwrites an existing volume.
-	
-	.DESCRIPTION
-		Overwrites an existing volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Refresh-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Refresh-PfaVolume()
 {
 	[CmdletBinding()]
@@ -1964,31 +991,7 @@ function Refresh-PfaVolume()
 	Invoke-RestMethod -Method Post -Uri $Uri -Body $Json -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.DESCRIPTION
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Volumes
-		One or more volume name(s) separated by commas.
-	
-	.PARAMETER Suffix
-		Specify a custom suffix that is added to the snapshot name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Suffix TEST -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1, Volume2, Volume3, Volume4 -Suffix TEST -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaSnapshot()
 {
 	[CmdletBinding()]
@@ -2011,25 +1014,7 @@ function New-PfaSnapshot()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Destroys the specified volume or snapshot.
-	
-	.DESCRIPTION
-		Destroys the specified volume or snapshot.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaVolume()
 {
 	[CmdletBinding()]
@@ -2049,25 +1034,7 @@ function Remove-PfaVolume()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Destroys the specified snapshot.
-	
-	.DESCRIPTION
-		Destroys the specified snapshot.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Snapshot name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaSnapshot -FlashArray 1.1.1.1 -Name Volume1.Snapshot -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaSnapshot()
 {
 	[CmdletBinding()]
@@ -2087,25 +1054,7 @@ function Remove-PfaSnapshot()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Eradicates the specified volume or snapshot.
-	
-	.DESCRIPTION
-		Eradicates the specified volume or snapshot.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Eradicate-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Eradicate-PfaVolume()
 {
 	[CmdletBinding()]
@@ -2125,28 +1074,7 @@ function Eradicate-PfaVolume()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Renames the specified volume.
-	
-	.DESCRIPTION
-		Renames the specified volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER CurrentName
-		Current name of volume to rename.
-
-	.PARAMETER NewName
-		Current name of volume to rename.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Rename-PfaVolume -FlashArray 1.1.1.1 -CurrentName Volume1 -NewName Volume9 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Rename-PfaVolume
 {
 	[CmdletBinding()]
@@ -2163,39 +1091,7 @@ function Rename-PfaVolume
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Rename -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Resizes a volume.
-	
-	.DESCRIPTION
-		Resizes a volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Truncate
-		This is a switch setting to use when resizing a volume that requires truncation.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Resize-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Resize-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 50G -Truncate -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Resize-PfaVolume
 {
 	[CmdletBinding()]
@@ -2240,40 +1136,8 @@ function Resize-PfaVolume
 	}
 }
 
-<#
-	.SYNOPSIS
-		Recovers the contents of the specified volume. Set the parameter to recover. 
-	
-	.DESCRIPTION
-		Recovers the contents of the specified volume. Set the parameter to recover.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-#>
-function Recover-PfaVolume
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
+function Restore-PfaVolume
 {
 	[CmdletBinding()]
 	Param (
@@ -2287,29 +1151,10 @@ function Recover-PfaVolume
 	} | ConvertTo-Json 
 	$Uri = "$PureStorageURIBase/volume/$Name"
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Recover -WebSession $Session -ContentType "application/json"
-	#$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Recovers the contents of the specified volume. Set the parameter to recover. 
-	
-	.DESCRIPTION
-		Recovers the contents of the specified volume. Set the parameter to recover.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Recover-PfaSnapshot -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
-function Recover-PfaSnapshot
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
+function Restore-PfaSnapshot
 {
 	[CmdletBinding()]
 	Param (
@@ -2328,30 +1173,8 @@ function Recover-PfaSnapshot
 #endregion
 
 #region FA-Hosts-Cmdlets
-<#
-	.SYNOPSIS
-		Lists all hosts on the array.
-	
-	.DESCRIPTION
-		Lists all hosts on the array.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
 
-	.PARAMETER Display (OPTIONAL)
-		Chap: Displays host and target user names and indicates whether host and target passwords have been set.
-
-		Personality: Displays the personality setting associated with the specified hosts.
-
-		Space: Displays information about provisioned (virtual) size and physical storage consumption for each 
-		volume connected to the specified hosts.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaHosts -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHosts()
 {
 	[CmdletBinding()]
@@ -2372,33 +1195,7 @@ function Get-PfaHosts()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists attributes for a specific host on the array.
-	
-	.DESCRIPTION
-		Lists attributes for a specific host on the array.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Display (OPTIONAL)
-		Chap: Displays host and target user names and indicates whether host and target passwords have been set.
-
-		Personality: Displays the personality setting associated with the specified hosts.
-
-		Space: Displays information about provisioned (virtual) size and physical storage consumption for each 
-		volume connected to the specified hosts.
-	
-	.SWITCH Volume (OPTIONAL)
-		Display all shared and private connections for the specified host.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaHost -FlashArray 1.1.1.1 -Name HOST1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHost()
 {
 	[CmdletBinding()]
@@ -2439,37 +1236,7 @@ function Get-PfaHost()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates a host with the specified name.
-	
-	.DESCRIPTION
-		Creates a host with the specified name.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host to create.
-
-	.PARAMETER IQNList (OPTIONAL)
-		Sets the list of iSCSI qualified names (IQNs) for the new host.
-	
-	.SWITCH WWNList (OPTIONAL)
-		Sets the list of Fibre Channel worldwide names (WWNs) for the new host.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOST1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOST1 -IQNList iqn.1992-01.TEST.com.example -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOST1 -WWNList 1111999900009999,2222999900009999,3333999900009999,4444999900009999 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaHost()
 {
 	[CmdletBinding()]
@@ -2506,28 +1273,7 @@ function New-PfaHost()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Assigns the same LUN to each connection. The connection fails for any host for which the specified LUN is already in use.
-	
-	.DESCRIPTION
-		Assigns the same LUN to each connection. The connection fails for any host for which the specified LUN is already in use.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host to connect.
-
-	.PARAMETER Volume
-		Volume to attach to host.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Connect-PfaVolume -FlashArray 1.1.1.1 -Name HOST1 -Volume VOLUME1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaHost()
 {
 	[CmdletBinding()]
@@ -2546,28 +1292,7 @@ function Connect-PfaHost()
 	Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Assigns the same LUN to each connection. The connection fails for any host for which the specified LUN is already in use.
-	
-	.DESCRIPTION
-		Assigns the same LUN to each connection. The connection fails for any host for which the specified LUN is already in use.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host to connect.
-
-	.PARAMETER Volume
-		Volume to attach to host.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Connect-PfaVolume -FlashArray 1.1.1.1 -Name HOST1 -Volume VOLUME1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaVolume()
 {
 	[CmdletBinding()]
@@ -2577,43 +1302,23 @@ function Connect-PfaVolume()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$HostConnect = $null
-	$HostConnect = [ordered]@{
-		name = $Name
-		vol = $Volume
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
-	Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$HostConnect = $null
+		$HostConnect = [ordered]@{
+			name = $Name
+			vol = $Volume
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
+		Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
-<#
-	.SYNOPSIS
-		Breaks the connection between a host and volume.
-	
-	.DESCRIPTION
-		Breaks the connection between a host and volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Volume
-		Volume to disconnect from host.
-
-	.PARAMETER Host
-		Name of host to disconnect.
-
-	.PARAMETER HostGroup 
-		Name of host group to disconnect.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disconnect-PfaVolume -FlashArray 1.1.1.1 -Volume VOLUME1 -Host HOST1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Disconnect-PfaVolume -FlashArray 1.1.1.1 -Volume VOLUME1 -HostGroup HOSTGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disconnect-PfaVolume()
 {
 	[CmdletBinding()]
@@ -2638,25 +1343,7 @@ function Disconnect-PfaVolume()
 	$Return = Invoke-RestMethod -Method Delete -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Destroys the specified host.
-	
-	.DESCRIPTION
-		Destroys the specified host.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Host name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaHost -FlashArray 1.1.1.1 -Name HOST1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaHost()
 {
 	[CmdletBinding()]
@@ -2679,34 +1366,8 @@ function Remove-PfaHost()
 #endregion
 
 #region FA-HostGroups-Cmdlets
-<#
-	.SYNOPSIS
-		Lists all or a specific host group.
 
-	.DESCRIPTION
-		Lists all or a specific host group.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name (OPTIONAL)
-		Host group name.
-	
-	.PARAMETER Space (OPTIONAL)
-		List space usage for all or a specific host group.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Get-HostGroups -FlashArray 1.1.1.1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-HostGroups -FlashArray 1.1.1.1 -Space -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-HostGroups -FlashArray 1.1.1.1 -Name HOSTGROUP1 -Space -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHostGroups()
 {
 	[CmdletBinding()]
@@ -2741,25 +1402,7 @@ function Get-PfaHostGroups()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists volumes associated with the specified host groups and the LUNs used to address them.
-
-	.DESCRIPTION
-		Lists volumes associated with the specified host groups and the LUNs used to address them.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Host group name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Get-HostGroupVolumes -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHostGroupVolumes()
 {
 	[CmdletBinding()]
@@ -2773,31 +1416,7 @@ function Get-PfaHostGroupVolumes()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates a host group with the specified name.
-	
-	.DESCRIPTION
-		Creates a host group with the specified name.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to create.
-
-	.PARAMETER HostList (OPTIONAL)
-		List of member hosts.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOSTGROUP1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaHostGroup()
 {
 	[CmdletBinding()]
@@ -2824,35 +1443,7 @@ function New-PfaHostGroup()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Connects a volume to all hosts in the specified host group.
-
-	.DESCRIPTION
-		Connects a volume to all hosts in the specified host group.
-
-		If the LUN is not specified, when the volume is connected to the host group, Purity 
-		assigns the same LUN to each connection. All hosts in the group use this LUN to 
-		communicate with the volume.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to connect.
-
-	.PARAMETER Volume
-		Volume to connect to host group.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOSTGROUP1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaHost -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaHostGroup()
 {
 	[CmdletBinding()]
@@ -2866,28 +1457,7 @@ function Connect-PfaHostGroup()
 	$Return = Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Adds host members of the host group.
-	
-	.DESCRIPTION
-		Adds host members of the host group.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to create.
-
-	.PARAMETER HostList
-		Adds a list of hosts to the existing list.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Add-PfaHostGroupHosts -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Add-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
@@ -2906,28 +1476,7 @@ function Add-PfaHostGroupHosts()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddHostList -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Removes host members of the host group.
-	
-	.DESCRIPTION
-		Removes host members of the host group.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to create.
-
-	.PARAMETER HostList
-		Removes list of hosts from the existing list.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaHostGroupHosts -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
@@ -2946,28 +1495,7 @@ function Remove-PfaHostGroupHosts()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $RemoveHostList -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Replaces host members of the host group.
-	
-	.DESCRIPTION
-		Replaces host members of the host group.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to create.
-
-	.PARAMETER HostList
-		Removes list of hosts from the existing list.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Update-PfaHostGroupHosts -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Update-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
@@ -2986,28 +1514,7 @@ function Update-PfaHostGroupHosts()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $ReplaceHostList -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Rename host group.
-	
-	.DESCRIPTION
-		Rename host group.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to rename.
-	
-	.PARAMETER NewName
-		New name of host group.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Rename-PfaHostGroup -FlashArray 1.1.1.1 -Name HOSTGROUP1 -HostList HOSTA,HOSTB,HOSTC,HOSTD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Rename-PfaHostGroup()
 {
 	[CmdletBinding()]
@@ -3025,25 +1532,7 @@ function Rename-PfaHostGroup()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateName -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Remove host group.
-	
-	.DESCRIPTION
-		Remove host group.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to remove.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaHostGroup -FlashArray 1.1.1.1 -Name HOSTGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaHostGroup
 {
 	[CmdletBinding()]
@@ -3057,28 +1546,7 @@ function Remove-PfaHostGroup
 	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disconnects host group from specified volume.
-	
-	.DESCRIPTION
-		Disconnects host group from specified volume.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Name of host group to disconnect volume.
-
-	.PARAMETER Volume
-		Name of volume to disconnect.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disconnect-PfaHostGroupVolume -FlashArray 1.1.1.1 -Name HOSTGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disconnect-PfaHostGroupVolume
 {
 	[CmdletBinding()]
@@ -3096,25 +1564,8 @@ function Disconnect-PfaHostGroupVolume
 #endregion
 
 #region FA-Protection-Group-Cmdlets
-<#
-	.SYNOPSIS
-		Lists all protection groups.	
 
-	.DESCRIPTION
-		Lists all protection groups.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroups -FlashArray 1.1.1.1 -Session $S
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroups -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroups()
 {
 	[CmdletBinding()]
@@ -3127,34 +1578,7 @@ function Get-PfaProtectionGroups()
 	Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Displays the total space consumption for all protection groups. 
-
-	.DESCRIPTION
-		Displays the total space consumption for all protection groups. 
-
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Source
-		Switch to show source. Source and Target are mutually exclusive.
-
-	.PARAMETER Target
-		Switch to show target. Source and Target are mutually exclusive.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSpace -FlashArray 1.1.1.1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSpace -FlashArray 1.1.1.1 -Source -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSpace -FlashArray 1.1.1.1 -Target -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsSpace()
 {
 	[CmdletBinding()]
@@ -3180,34 +1604,7 @@ function Get-PfaProtectionGroupsSpace()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists size and space consumption attributes for each protection group.
-	
-	.DESCRIPTION
-		Lists size and space consumption attributes for each protection group.
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Source
-		Switch to show source. Source and Target are mutually exclusive.
-
-	.PARAMETER Target
-		Switch to show target. Source and Target are mutually exclusive.
-
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSnapshotSpace -FlashArray 1.1.1.1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSnapshotSpace -FlashArray 1.1.1.1 -Source -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSnapshotSpace -FlashArray 1.1.1.1 -Target -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsSnapshotSpace()
 {
 	[CmdletBinding()]
@@ -3233,26 +1630,7 @@ function Get-PfaProtectionGroupsSnapshotSpace()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Used with the snap parameter to display (true) replication data transfer statistics, including data 
-		transfer start time, data transfer end time, data transfer progress, and amount of logical/physical 
-		data transferred.	
-
-	.DESCRIPTION
-		Used with the snap parameter to display (true) replication data transfer statistics, including data 
-		transfer start time, data transfer end time, data transfer progress, and amount of logical/physical 
-		data transferred.	
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsTransferStatisics -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsTransferStatisics()
 {
 	[CmdletBinding()]
@@ -3265,22 +1643,7 @@ function Get-PfaProtectionGroupsTransferStatisics()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Includes destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds.	
-
-	.DESCRIPTION
-		Includes destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsPending -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsPending()
 {
 	[CmdletBinding()]
@@ -3293,34 +1656,7 @@ function Get-PfaProtectionGroupsPending()
 	return $Return | Where-Object { $_.time_remaining }
 }
 
-<#
-	.SYNOPSIS
-		Displays the snapshot/replication schedule.
-
-	.DESCRIPTION
-		Displays the snapshot/replication schedule.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Source
-		Switch to show source. Source and Target are mutually exclusive.
-
-	.PARAMETER Target
-		Switch to show target. Source and Target are mutually exclusive.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSchedule -FlashArray 1.1.1.1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSchedule -FlashArray 1.1.1.1 -Source -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSchedule -FlashArray 1.1.1.1 -Target -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsSchedule()
 {
 	[CmdletBinding()]
@@ -3346,34 +1682,7 @@ function Get-PfaProtectionGroupsSchedule()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists protection groups and snapshots created on this array. 
-
-	.DESCRIPTION
-		Lists protection groups and snapshots created on this array. 
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Source
-		Switch to show source. Source and Target are mutually exclusive.
-
-	.PARAMETER Target
-		Switch to show target. Source and Target are mutually exclusive.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsRetentionPolicy -FlashArray 1.1.1.1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsRetentionPolicy -FlashArray 1.1.1.1 -Source -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsRetentionPolicy -FlashArray 1.1.1.1 -Target -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsRetentionPolicy()
 {
 	[CmdletBinding()]
@@ -3399,22 +1708,7 @@ function Get-PfaProtectionGroupsRetentionPolicy()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds. 	
-
-	.DESCRIPTION
-		Lists destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds. 	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsPendingOnly -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsPendingOnly()
 {
 	[CmdletBinding()]
@@ -3426,22 +1720,7 @@ function Get-PfaProtectionGroupsPendingOnly()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists all snapshots (true).
-	
-	.DESCRIPTION
-		Lists all snapshots (true).
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupsSnapshots -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupsSnapshots()
 {
 	[CmdletBinding()]
@@ -3453,25 +1732,7 @@ function Get-PfaProtectionGroupsSnapshots()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists a specific protection group.	
-
-	.DESCRIPTION
-		Lists a specific protection group.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Specific protection group name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroups -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroup()
 {
 	[CmdletBinding()]
@@ -3485,25 +1746,7 @@ function Get-PfaProtectionGroup()
 	Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Displays the total space consumption for a protection group. 
-
-	.DESCRIPTION
-		Displays the total space consumption for a protection group. 
-
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupSpace -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupSpace()
 {
 	[CmdletBinding()]
@@ -3517,26 +1760,7 @@ function Get-PfaProtectionGroupSpace()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists size and space consumption attributes for a protection group.
-	
-	.DESCRIPTION
-		Lists size and space consumption attributes for a protection group.
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Name
-		Protection group name.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupSnapshotSpace -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupSnapshotSpace()
 {
 	[CmdletBinding()]
@@ -3550,29 +1774,7 @@ function Get-PfaProtectionGroupSnapshotSpace()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Used with the snap parameter to display (true) replication data transfer statistics, including data 
-		transfer start time, data transfer end time, data transfer progress, and amount of logical/physical 
-		data transferred.	
-
-	.DESCRIPTION
-		Used with the snap parameter to display (true) replication data transfer statistics, including data 
-		transfer start time, data transfer end time, data transfer progress, and amount of logical/physical 
-		data transferred.	
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Name
-		Protection group name.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupTransferStatisics -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupTransferStatisics()
 {
 	[CmdletBinding()]
@@ -3586,25 +1788,7 @@ function Get-PfaProtectionGroupTransferStatisics()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Includes destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds.	
-
-	.DESCRIPTION
-		Includes destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupPending -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupPending()
 {
 	[CmdletBinding()]
@@ -3618,25 +1802,7 @@ function Get-PfaProtectionGroupPending()
 	return $Return | Where-Object { $_.time_remaining }
 }
 
-<#
-	.SYNOPSIS
-		Displays the snapshot/replication schedule.
-
-	.DESCRIPTION
-		Displays the snapshot/replication schedule.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupSchedule -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupSchedule()
 {
 	[CmdletBinding()]
@@ -3650,25 +1816,7 @@ function Get-PfaProtectionGroupSchedule()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists protection groups and snapshots created on this array. 
-
-	.DESCRIPTION
-		Lists protection groups and snapshots created on this array. 
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupRetentionPolicy -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupRetentionPolicy()
 {
 	[CmdletBinding()]
@@ -3682,25 +1830,7 @@ function Get-PfaProtectionGroupRetentionPolicy()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds. 	
-
-	.DESCRIPTION
-		Lists destroyed protection groups that are in the eradication pending state. Time remaining is displayed in seconds. 	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupPendingOnly -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupPendingOnly()
 {
 	[CmdletBinding()]
@@ -3713,25 +1843,7 @@ function Get-PfaProtectionGroupPendingOnly()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists all snapshots (true).
-	
-	.DESCRIPTION
-		Lists all snapshots (true).
-	
-	.PARAMETER FlashArray
-		A description of the FlashArray parameter.
-
-	.PARAMETER Name
-		Protection group name.
-	
-	.PARAMETER Session
-		A description of the Session parameter.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaProtectionGroupSnapshots -FlashArray 1.1.1.1 -Name PGROUP1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaProtectionGroupSnapshots()
 {
 	[CmdletBinding()]
@@ -3744,37 +1856,7 @@ function Get-PfaProtectionGroupSnapshots()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates a new snapshot of a Pure Storage Protection Group(s). 
-	
-	.DESCRIPTION
-		The New-PfaProtectionGroupSnapshot creates a new snapshot of the host, host group or volumes
-		that are part of a Protection Group. Assumes that the apply_retention will be used for all snapshots.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Identification of the Pure Storage Protection Group to snapshot.
-
-	.PARAMETER SnapshotSuffix (Optional)
-		Suffix to use for the new Protection Group snapshot. The snapshot suffixes must consist of 
-		between 1 and 63 characters (alphanumeric and '-'), starting and ending with a letter or a
-		number. It MUST NOT consist of all numeric values.
-
-	.PARAMETER ReplicateNow
-		Replicates this snapshot to all target arrays.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroupSnapshot -FlashArray 1.1.1.1 -Name TESTGROUP -SnapshotSuffix TEST -ReplicateNow -Session $S
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroupSnapshot -FlashArray 1.1.1.1 -Name TESTGROUP -ReplicateNow -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaProtectionGroupSnapshot()
 {
 	[CmdletBinding()]
@@ -3835,47 +1917,7 @@ function New-PfaProtectionGroupSnapshot()
 	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroupSnapshot -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Creates a new snapshot of a Pure Storage Protection Group(s). 
-	
-	.DESCRIPTION
-		The New-PfaProtectionGroupSnapshot creates a new snapshot of the host, host group or volumes
-		that are part of a Protection Group. Assumes that the apply_retention will be used for all snapshots.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER HostGroups
-		List of one or more host groups to be included in the new protection group.
-
-	.PARAMETER Hosts
-		List of one or more hosts to be included in the new protection group.
-
-	.PARAMETER Volumes
-		List of one or more volumes to be included in the new protection group.
-
-	.PARAMETER ReplicationTargets
-		List of one or more targets to be included in the new protection group.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -HostGroups HG1,HG2 -Session $S
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Hosts HOST1,HOST2,HOST3 -Session $S
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Volumes VOL1,VOl2,VOL3,VOL4,VOL5 -Session $S
-
-	.EXAMPLE
-		PS C:\> New-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Volumes VOL1,VOl2,VOL3,VOL4,VOL5 -ReplicationTargets ARRAY2 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaProtectionGroup()
 {
 	[CmdletBinding()]
@@ -3938,25 +1980,7 @@ function New-PfaProtectionGroup()
 	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Destroys the specified protection group and all of its snapshots.
-
-	.DESCRIPTION
-		Destroys the specified protection group and all of its snapshots.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Remove-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaProtectionGroup()
 {
 	[CmdletBinding()]
@@ -3970,25 +1994,7 @@ function Remove-PfaProtectionGroup()
 	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Destroys the specified protection group snapshot(s).
-
-	.DESCRIPTION
-		Destroys the specified protection group snapshot(s).
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Remove-PfaProtectionGroupSnapshots -FlashArray 1.1.1.1 -Name TESTGROUP.SNAPSHOT -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaProtectionGroupSnapshots()
 {
 	[CmdletBinding()]
@@ -4009,25 +2015,7 @@ function Remove-PfaProtectionGroupSnapshots()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Eradicates a destroyed protection group and all of its snapshots.	
-
-	.DESCRIPTION
-		Eradicates a destroyed protection group and all of its snapshots.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Eradicate-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Eradicate-PfaProtectionGroup()
 {
 	[CmdletBinding()]
@@ -4046,25 +2034,7 @@ function Eradicate-PfaProtectionGroup()
 	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Eradicates a destroyed protection group and all of its snapshots.	
-
-	.DESCRIPTION
-		Eradicates a destroyed protection group and all of its snapshots.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Eradicate-PfaProtectionGroup -FlashArray 1.1.1.1 -Name TESTGROUP -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Eradicate-PfaProtectionGroupSnapshots()
 {
 	[CmdletBinding()]
@@ -4090,40 +2060,8 @@ function Eradicate-PfaProtectionGroupSnapshots()
 	}
 }
 
-<#
-	.SYNOPSIS
-		Recovers the contents of the specified volume. Set the parameter to recover. 
-	
-	.DESCRIPTION
-		Recovers the contents of the specified volume. Set the parameter to recover.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-#>
-function Recover-PfaProtectionGroup
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
+function Restore-PfaProtectionGroup
 {
 	[CmdletBinding()]
 	Param (
@@ -4139,40 +2077,8 @@ function Recover-PfaProtectionGroup
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupRecover -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Recovers the contents of the specified volume. Set the parameter to recover. 
-	
-	.DESCRIPTION
-		Recovers the contents of the specified volume. Set the parameter to recover.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-#>
-function Recover-PfaProtectionGroupSnapshots
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
+function Restore-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
 	Param (
@@ -4195,31 +2101,7 @@ function Recover-PfaProtectionGroupSnapshots
 	}
 }
 
-<#
-	.SYNOPSIS
-		Renames a protection group.	
-
-	.DESCRIPTION
-		Renames a protection group.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Current protection group name.
-
-	.PARAMETER NewName
-		New protection group name.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Rename-PfaProtectionGroup -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Rename-PfaProtectionGroup -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Rename-PfaProtectionGroup
 {
 	[CmdletBinding()]
@@ -4237,25 +2119,7 @@ function Rename-PfaProtectionGroup
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupUpdate -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Enable the protection group replication schedule.	
-
-	.DESCRIPTION
-		Enable the protection group replication schedule.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaProtectionGroupReplication -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaProtectionGroupReplication
 {
 	[CmdletBinding()]
@@ -4272,25 +2136,7 @@ function Enable-PfaProtectionGroupReplication
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disable the protection group replication schedule.	
-
-	.DESCRIPTION
-		Disable the protection group replication schedule.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disable-PfaProtectionGroupReplication -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaProtectionGroupReplication
 {
 	[CmdletBinding()]
@@ -4307,25 +2153,7 @@ function Disable-PfaProtectionGroupReplication
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Enable the protection group snapshot schedule.	
-
-	.DESCRIPTION
-		Enable the protection group snapshot schedule.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaProtectionGroupSnapshots -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
@@ -4342,25 +2170,7 @@ function Enable-PfaProtectionGroupSnapshots
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disable the protection group snapshot schedule.	
-
-	.DESCRIPTION
-		Disable the protection group snapshot schedule.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Disable-PfaProtectionGroupSnapshots -FlashArray 1.1.1.1 -Name Volume1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
@@ -4377,38 +2187,7 @@ function Disable-PfaProtectionGroupSnapshots
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Creates a new snapshot of a Pure Storage Protection Group(s). 
-	
-	.DESCRIPTION
-		The New-PfaProtectionGroupSnapshot creates a new snapshot of the host, host group or volumes
-		that are part of a Protection Group. Assumes that the apply_retention will be used for all snapshots.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER HostGroups
-		Add one or more host groups to be included in the new protection group.
-
-	.PARAMETER Hosts
-		Add one or more hosts to be included in the new protection group.
-
-	.PARAMETER Volumes
-		Add one or more volumes to be included in the new protection group.
-
-	.PARAMETER ReplicationTargets
-		Add one or more targets to be included in the new protection group.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Add-PfaProtectionGroupMembers -FlashArray 1.1.1.1 -Name TESTGROUP -HostGroups HG1,HG2 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Add-PfaProtectionGroupMembers()
 {
 	[CmdletBinding()]
@@ -4453,37 +2232,7 @@ function Add-PfaProtectionGroupMembers()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Removes a members (HostGroups, Hosts, Volumes or Replication Targets from the existing list.
-	
-	.DESCRIPTION
-		Removes a members (HostGroups, Hosts, Volumes or Replication Targets from the existing list.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER HostGroups
-		Remove one or more host groups to be included in the new protection group.
-
-	.PARAMETER Hosts
-		Remove one or more hosts to be included in the new protection group.
-
-	.PARAMETER Volumes
-		Remove one or more volumes to be included in the new protection group.
-
-	.PARAMETER ReplicationTargets
-		Remove one or more targets to be included in the new protection group.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Add-PfaProtectionGroupMembers -FlashArray 1.1.1.1 -Name TESTGROUP -HostGroups HG1,HG2 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaProtectionGroupMembers()
 {
 	[CmdletBinding()]
@@ -4528,28 +2277,7 @@ function Remove-PfaProtectionGroupMembers()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Allows (true) or disallows (false) a protection group from being replicated.	
-
-	.DESCRIPTION
-		Allows (true) or disallows (false) a protection group from being replicated.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER Replication
-		Allow or Disallow replication.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		PS C:\> Update-PfaProtectionGroupReplication -FlashArray 1.1.1.1 -Name TESTGROUP -Replication Allow -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Update-PfaProtectionGroupReplication()
 {
 	[CmdletBinding()]
@@ -4578,35 +2306,7 @@ function Update-PfaProtectionGroupReplication()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Modifies the replication schedule of the protection group. Specifies the range of time at which to 
-		suspend replication. See below example for the dictionary format.
-
-	.DESCRIPTION
-		Modifies the replication schedule of the protection group. Specifies the range of time at which to 
-		suspend replication. See below example for the dictionary format.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Name
-		Protection group name.
-
-	.PARAMETER StartTime
-		Start time of blackout period. Format 24hr clock, Eg. 2pm = 14, 8pm = 20
-
-	.PARAMETER EndTime
-		Start time of blackout period. Format 24hr clock, Eg. 2pm = 14, 8pm = 20
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-
-	.EXAMPLE
-		Creates a blackout period between 2am and 6am.
-	
-		PS C:\> Update-PfaProtectionGroupReplication -FlashArray 1.1.1.1 -Name TESTGROUP -StartTime 2 -EndTime 6 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaProtectionGroupReplicationBlackout()
 {
 	[CmdletBinding()]
@@ -4631,44 +2331,7 @@ function Set-PfaProtectionGroupReplicationBlackout()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetBlackout -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.DESCRIPTION
-		Creates a volume or copies a volume or snapshot. Either the size or source parameter must be specified.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-	
-	.PARAMETER Name
-		Volume name.
-	
-	.PARAMETER Size
-		Creates a volume with the specified provisioned size.
-
-		Enter the size as a number (bytes) or as a string with a single character unit symbol. Valid 
-		unit symbols are S, K, M, G, T, P, denoting 512-byte sectors, KiB, MiB, GiB, TiB, and PiB respectively.
-		"Ki" denotes 2^10, "Mi" denotes 2^20, and so on. If the unit symbol is not specified, the unit defaults 
-		to sectors.
-	
-	.PARAMETER Source
-		Creates a new volume from a snapshot as the source.
-	
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Size 100G -Session $MySession
-
-	.EXAMPLE
-		PS C:\> New-PfaVolume -FlashArray 1.1.1.1 -Name Volume1 -Source Volume2.Snapshot -Session $MySession
-Restore-PfaProtectionGroupVolumeSnapshots –FlashArray $FA `
-										  –ProtectionGroup "CS-PERF-PURE-02:LT" `
-										  –VolumeSnaphots "CS-PERF-PURE-02:LT.2" `
-										  –Prefix TEST `
-										  –Session $FASession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Restore-PfaProtectionGroupVolumeSnapshots()
 {
 	[CmdletBinding()]
@@ -4710,22 +2373,8 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 #endregion
 
 #region FA-Connection-Port-Cmdlets
-<#
-	.SYNOPSIS
-		Lists array ports and the worldwide names assigned to each port.	
 
-	.DESCRIPTION
-		Lists array ports and the worldwide names assigned to each port.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaPorts -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaPorts()
 {
 	[CmdletBinding()]
@@ -4737,24 +2386,7 @@ function Get-PfaPorts()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Displays host worldwide names (both those discovered by Purity and those assigned by administrators) and the 
-		array ports (targets) on which they are eligible to communicate.
-
-	.DESCRIPTION
-		Displays host worldwide names (both those discovered by Purity and those assigned by administrators) and the 
-		array ports (targets) on which they are eligible to communicate.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaInitiators -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaInitiators()
 {
 	[CmdletBinding()]
@@ -4766,22 +2398,7 @@ function Get-PfaInitiators()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Enables (true) the array ports, opening or blocking communication with hosts.
-
-	.DESCRIPTION
-		Enables (true) the array ports, opening or blocking communication with hosts.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaPorts -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaPorts()
 {
 	[CmdletBinding()]
@@ -4793,22 +2410,7 @@ function Enable-PfaPorts()
 	$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disables (false) the array ports, opening or blocking communication with hosts.
-
-	.DESCRIPTION
-		Disables (false) the array ports, opening or blocking communication with hosts.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaPorts -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaPorts()
 {
 	[CmdletBinding()]
@@ -4823,22 +2425,8 @@ function Disable-PfaPorts()
 #endregion
 
 #region FA-Alerts-Messages-Cmdlets
-<#
-	.SYNOPSIS
-		Lists email recipients that are designated to receive Purity alert messages.	
 
-	.DESCRIPTION
-		Lists email recipients that are designated to receive Purity alert messages.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaAlerts -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaAlerts()
 {
 	[CmdletBinding()]
@@ -4851,25 +2439,7 @@ function Get-PfaAlerts()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists information about the specified email recipient.	
-
-	.DESCRIPTION
-		Lists information about the specified email recipient.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient, defaults to flasharray-alerts@purestorage.com
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaAlertRecipient -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -4883,25 +2453,7 @@ function Get-PfaAlertRecipient()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists information about the specified email recipient.	
-
-	.DESCRIPTION
-		Lists information about the specified email recipient.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient to add.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaAlertRecipient -FlashArray 1.1.1.1 -Email test@test.com -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -4915,25 +2467,7 @@ function New-PfaAlertRecipient()
 	$Return = (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Tests the ability of the array to send alert messages to all of the designated email addresses.
-	
-	.DESCRIPTION
-		Tests the ability of the array to send alert messages to all of the designated email addresses.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient to test.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Test-PfaAlertRecipient -FlashArray 1.1.1.1 -Email test@test.com -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Test-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -4950,25 +2484,7 @@ function Test-PfaAlertRecipient()
 	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $Test -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Enables (true) the transmission of alert messages to the specified email address.	
-
-	.DESCRIPTION
-		Enables (true) the transmission of alert messages to the specified email address.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient to test.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Enable-PfaAlertRecipient -FlashArray 1.1.1.1 -Email test@test.com -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -4984,25 +2500,7 @@ function Enable-PfaAlertRecipient()
 	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Disables (false) the transmission of alert messages to the specified email address.	
-
-	.DESCRIPTION
-		Disables (false) the transmission of alert messages to the specified email address.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient to test.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Disable-PfaAlertRecipient -FlashArray 1.1.1.1 -Email test@test.com -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -5019,44 +2517,7 @@ function Disable-PfaAlertRecipient()
 	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Disables (false) the transmission of alert messages to the specified email address.	
-
-	.DESCRIPTION
-		Disables (false) the transmission of alert messages to the specified email address.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Type
-		All: Lists all alert events and audit records.	 
-
-		Audit: Lists audit records instead of alerts.
-
-		Flagged: Lists flagged messages only. The array automatically flags warnings and critical alerts.
-
-		Open: Lists open messages.
-
-		Recent: Lists recent messages. An audit record is considered recent if it relates to a command 
-		issued within the past 24 hours. An alert is considered recent if the situation that triggered 
-		it is unresolved, or has only been resolved within the past 24 hours.
-
-		User: When audit is set to true, user can be used to list audit records for a specific user.
-
-	.PARAMETER Username (OPTIONAL)
-		When audit is set to true, user can be used to list audit records for a specific user.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaMessages -FlashArray 1.1.1.1 -Type Audit -Session $S
-
-	.EXAMPLE
-		PS C:\> Get-PfaMessages -FlashArray 1.1.1.1 -Type User -Username User1 -Session $S
-
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaMessages()
 {
 	[CmdletBinding()]
@@ -5078,27 +2539,7 @@ function Get-PfaMessages()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Deletes an email address from the list of addresses designated to receive Purity alert messages. 
-		You cannot delete the built-in flasharray-alerts@purestorage.com address.	
-
-	.DESCRIPTION
-		Deletes an email address from the list of addresses designated to receive Purity alert messages. 
-		You cannot delete the built-in flasharray-alerts@purestorage.com address.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Email
-		Email recipient to add.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaAlertRecipient -FlashArray 1.1.1.1 -Email test@test.com -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaAlertRecipient()
 {
 	[CmdletBinding()]
@@ -5112,25 +2553,7 @@ function Remove-PfaAlertRecipient()
 	$Return = (Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Unflags a message.
-
-	.DESCRIPTION
-		Unflags (false) a message.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Id
-		Unflags a message.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Hide-PfaMessage -FlashArray 1.1.1.1 -Id 25680 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Hide-PfaMessage()
 {
 	[CmdletBinding()]
@@ -5144,25 +2567,7 @@ function Hide-PfaMessage()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Flags a message. 
-
-	.DESCRIPTION
-		Flags (true) a message. If set to true, flags the message with the specified ID. If set to false, unflags the message.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Id
-		Flags a message.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Show-PfaMessage -FlashArray 1.1.1.1 -Id 25680 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Show-PfaMessage()
 {
 	[CmdletBinding()]
@@ -5179,25 +2584,8 @@ function Show-PfaMessage()
 #endregion
 
 #region FA-SNMP-Manager-Connections-Cmdlets
-<#
-	.SYNOPSIS
-		Lists designated SNMP managers and their communication and security attributes.	
 
-	.DESCRIPTION
-		Lists designated SNMP managers and their communication and security attributes.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER EngineId
-		SNMP v3 only. If set to true, displays the SNMP v3 engine ID generated by Purity for the array.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaSnmp -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaSnmp()
 {
 	[CmdletBinding()]
@@ -5218,25 +2606,7 @@ function Get-PfaSnmp()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Stops communication with the specified managers and deletes the SNMP manager object.
-
-	.DESCRIPTION
-		Stops communication with the specified managers and deletes the SNMP manager object.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		SNMP v3 only. If set to true, displays the SNMP v3 engine ID generated by Purity for the array.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaSnmpManager -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaSnmpManager()
 {
 	[CmdletBinding()]
@@ -5250,25 +2620,7 @@ function Remove-PfaSnmpManager()
 	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Lists communication and security attributes for the specified SNMP manager.
-
-	.DESCRIPTION
-		Lists communication and security attributes for the specified SNMP manager.
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		Name of the SNMP manager.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaSnmpManager -FlashArray 1.1.1.1 -Manager SNMPMANAGER -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaSnmpManager()
 {
 	[CmdletBinding()]
@@ -5282,53 +2634,7 @@ function Get-PfaSnmpManager()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-	.DESCRIPTION
-		Creates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-		Once a manager object is created, the transmission of SNMP traps is immediately enabled.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		Name of the SNMP manager.
-
-	.PARAMETER Hostname
-		DNS hostname or IP address of a computer that hosts an SNMP manager to which Purity is to send trap 
-		messages when it generates alerts.
-
-	.PARAMETER User
-		SNMP v3 only. User ID recognized by the specified SNMP managers which Purity is to use in communications 
-		with them. The value must be between 1 and 32 characters in length and from the set {[A-Z], [a-z], [0-9], 
-		_ (underscore), and -(hyphen)}.
-
-	.PARAMETER AuthProtocol
-		SNMP v3 only. Hash algorithm used to validate the authentication passphrase. Valid values are MD5 or SHA.
-
-	.PARAMETER AuthPassphrase
-		SNMP v3 only. Passphrase used by Purity to authenticate the array with the specified managers. The value 
-		must be between 1 and 32 characters in length and from the set {[A-Z], [a-z], [0-9], _ (underscore), 
-		and - (hyphen)}.
-
-	.PARAMETER PrivacyProtocol
-		SNMP v3 only. Passphrase used to encrypt SNMP messages. The value must be between 8 and 63 non-space 
-		ASCII characters in length.
-
-	.PARAMETER PrivacyPassphrase
-		SNMP v3 only. Encryption protocol for SNMP messages. Valid values are AES or DES.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> New-PfaSnmpv3Manager -FlashArray 1.1.1.1 -Manager TEST -Hostname TEST1 -User Administrator -AuthProtocol MD5 -AuthPassphrase TESTPHRASE -PrivacyProtocol AES -PrivacyPassphrase TESTPHRASE -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaSnmpv3Manager()
 {
 	[CmdletBinding()]
@@ -5359,38 +2665,7 @@ function New-PfaSnmpv3Manager()
 	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv3Config -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Creates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-	.DESCRIPTION
-		Creates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-		Once a manager object is created, the transmission of SNMP traps is immediately enabled.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		Name of the SNMP manager.
-
-	.PARAMETER Hostname
-		DNS hostname or IP address of a computer that hosts an SNMP manager to which Purity is to send trap 
-		messages when it generates alerts.
-
-	.PARAMETER Community
-		SNMP v2c only. Manager community ID under which Purity is to communicate with the specified managers. 
-		The value must be between 1 and 32 characters in length and from the set {[A-Z], [a-z], [0-9], 
-		_ (underscore), and - (hyphen)}.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> New-PfaSnmpv2cManager -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaSnmpv2cManager()
 {
 	[CmdletBinding()]
@@ -5413,32 +2688,7 @@ function New-PfaSnmpv2cManager()
 	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv2cConfig -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Updates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-	.DESCRIPTION
-		Creates a Purity SNMP manager object that identifies a host (SNMP manager) and specifies the protocol 
-		attributes for communicating with it.
-
-		Once a manager object is created, the transmission of SNMP traps is immediately enabled.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		Name of the SNMP manager.
-
-	.PARAMETER Name
-		New name of the SNMP manager.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Update-PfaSnmpManager -FlashArray 1.1.1.1 -Manager TEST -Name NEWTEST -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Update-PfaSnmpManager()
 {
 	[CmdletBinding()]
@@ -5458,25 +2708,7 @@ function Update-PfaSnmpManager()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SnmpManagerName -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Send test trap to the specified Purity SNMP manager object.
-
-	.DESCRIPTION
-		Send test trap to the specified Purity SNMP manager object.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Manager
-		Name of the SNMP manager.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Test-PfaSnmpManager -FlashArray 1.1.1.1 -Manager TEST -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Test-PfaSnmpManager()
 {
 	[CmdletBinding()]
@@ -5497,25 +2729,8 @@ function Test-PfaSnmpManager()
 #endregion
 
 #region FA-SSL-Cmdlets
-<#
-	.SYNOPSIS
-		Lists certificate attributes or exports certificates.
 
-	.DESCRIPTION
-		Lists certificate attributes or exports certificates.
-
-		If the request does not include parameters, the REST API call returns the attributes of the certificate. 
-		Include the certificate or intermediate_certificate parameter to export the respective certificate.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaSslCert -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaSslCert()
 {
 	[CmdletBinding()]
@@ -5528,32 +2743,7 @@ function Get-PfaSslCert()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Exports certificates attributes.
-
-	.DESCRIPTION
-		Exports certificates attributes.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.SWITCH Certificate
-		If set exports the current certificate
-	
-	.SWITCH IntermediateCertificate
-		If set exports the current intermediate certificate.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Export-PfaSslCert -FlashArray 1.1.1.1 -Certificate -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Export-PfaSslCert -FlashArray 1.1.1.1 -IntermediateCertification -Session $MySession
-
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Export-PfaSslCert()
 {
 	[CmdletBinding()]
@@ -5586,22 +2776,8 @@ function Export-PfaSslCert()
 #endregion
 
 #region FA-Network-Interface-Cmdlets
-<#
-	.SYNOPSIS
-		Lists DNS attributes for the array administrative network.
 
-	.DESCRIPTION
-		Lists DNS attributes for the array administrative network.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaDns -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDns
 {
 	[CmdletBinding()]
@@ -5614,29 +2790,7 @@ function Get-PfaDns
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists DNS attributes for the array administrative network.
-
-	.DESCRIPTION
-		Lists DNS attributes for the array administrative network.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Domain
-		Domain suffix to be appended by the array when performing DNS lookups.
-
-	.PARAMETER Nameservers
-		A list of up to three DNS server IP addresses that replace the current list of name servers. The order of the list 
-		is significant. Purity queries DNS servers in the order in which their IP addresses are listed in this option.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaDns -FlashArray 1.1.1.1 -Domain EXAMPLE.COM -Nameservers 9.9.9.9,4.4.4.4,6.6.6.6 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaDns
 {
 	[CmdletBinding()]
@@ -5678,22 +2832,7 @@ function Set-PfaDns
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Dns -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Lists array administrative network interfaces and their statuses (enabled or disabled) and attributes.
-
-	.DESCRIPTION
-		Lists array administrative network interfaces and their statuses (enabled or disabled) and attributes.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaNetwork -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaNetwork
 {
 	[CmdletBinding()]
@@ -5706,25 +2845,7 @@ function Get-PfaNetwork
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists the attributes for the specified network component.
-
-	.DESCRIPTION
-		Lists the attributes for the specified network component.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Interface
-		Interface to retrieve. Eg. CT0.ETH0, CT0.ETH1, CT1.ETH0, REPLBOND, VIR0, VIR1
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaNetworkInterface -FlashArray 1.1.1.1 -Interface CT0.ETH0 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaNetworkInterface
 {
 	[CmdletBinding()]
@@ -5742,25 +2863,8 @@ function Get-PfaNetworkInterface
 #endregion
 
 #region FA-Hardware-Cmdlets
-<#
-	.SYNOPSIS
-		Lists array hardware component information.
 
-	.DESCRIPTION
-		Lists array hardware component information.
-
-		Returns information about array hardware components that are capable of reporting their status. The display 
-		is primarily useful for diagnosing hardware-related problems.	
-	
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaHardware -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHardware()
 {
 	[CmdletBinding()]
@@ -5772,25 +2876,7 @@ function Get-PfaHardware()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists the attributes for the specified hardware component.
-
-	.DESCRIPTION
-		Lists the attributes for the specified hardware component.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Component
-		Specific component to query.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaHardware -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaHardwareComponent()
 {
 	[CmdletBinding()]
@@ -5803,28 +2889,7 @@ function Get-PfaHardwareComponent()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Controls the visual identification of the specified controllers, storage shelves, and storage shelf drive bays.
-
-	.DESCRIPTION
-		Controls the visual identification of the specified controllers, storage shelves, and storage shelf drive bays.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Component
-		Specific component to query.
-
-	.PARAMETER State
-		On or Off for LED.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Show-PfaHardwareLed -FlashArray 1.1.1.1 -Component SH0.BAY0 -State On -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Show-PfaHardwareLed()
 {
 	[CmdletBinding()]
@@ -5856,22 +2921,7 @@ function Show-PfaHardwareLed()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $LED -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Lists SSD and NVRAM modules and their attributes.
-
-	.DESCRIPTION
-		Lists SSD and NVRAM modules and their attributes.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaDrive -FlashArray 1.1.1.1 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDrives()
 {
 	[CmdletBinding()]
@@ -5883,25 +2933,7 @@ function Get-PfaDrives()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists the attributes for the specified drive.
-
-	.DESCRIPTION
-		Lists the attributes for the specified drive.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Location
-		Location of drive. Eg. SH0.BAY0
-
-	.PARAMETER Session
-		Pure Storage FlashArray session created with Connect-PfaController.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaDrive -FlashArray 1.1.1.1 -Location SH0.BAY0 -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDrive()
 {
 	[CmdletBinding()]
@@ -5917,27 +2949,8 @@ function Get-PfaDrive()
 #endregion
 
 #region FA-Users-Cmdlets
-<#
-	.SYNOPSIS
-		Lists public key and API token information for all users.
 
-	.DESCRIPTION
-		Lists public key and API token information for all users.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Show
-		API_Token: Displays a list of users that have REST API access and the dates in which the API tokens were created.
-
-		Public_Key: Displays a list of users that have public key access.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaAdmin -FlashArray 1.1.1.1 -Show API_Token -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaUsers()
 {
 	[CmdletBinding()]
@@ -5956,33 +2969,7 @@ function Get-PfaUsers()
 	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Lists public key and API token information for all users.
-
-	.DESCRIPTION
-		Lists public key and API token information for all users.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Show
-		API_Token: Displays a list of users that have REST API access and the dates in which the API tokens were created.
-
-		Public_Key: Displays a list of users that have public key access.
-
-	.PARAMETER User
-		Lists public key or API token information for the specified user.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Get-PfaAdmin -FlashArray 1.1.1.1 -Show API_Token -Session $MySession
-
-	.EXAMPLE
-		PS C:\> Get-PfaAdmin -FlashArray 1.1.1.1 -Show API_Token -User pureuser -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaUser()
 {
 	[CmdletBinding()]
@@ -6013,25 +3000,7 @@ function Get-PfaUser()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Creates an API token for the specified user.
-	
-	.DESCRIPTION
-		Creates an API token for the specified user.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER User
-		Lists public key or API token information for the specified user.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> New-PfaApiToken -FlashArray 1.1.1.1 -User NEWUSER -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaApiToken()
 {
 	[CmdletBinding()]
@@ -6045,24 +3014,7 @@ function New-PfaApiToken()
 	return (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Clears all user permission cache entries.
-
-	.DESCRIPTION
-		Clears all user permission cache entries.
-
-		User permission cache entries are also automatically updated when the user starts a new session.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Clear-PfaPermissionCache -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Clear-PfaPermissionCache()
 {
 	[CmdletBinding()]
@@ -6080,32 +3032,7 @@ function Clear-PfaPermissionCache()
 	return (Invoke-RestMethod -Method PUT -Uri $Uri -Body $ClearPermCache -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Sets the password or public key or refreshes the user permission cache entries for the specified user.
-
-	.DESCRIPTION
-		Sets the password or public key or refreshes the user permission cache entries for the specified user.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER User
-		User to update.
-
-	.PARAMETER Old
-		Used with the password parameter to change the password for the single, local administrative account pureuser. 
-		
-	.PARAMETER New
-		Used with the Old parameter to change the password for the single, local administrative account pureuser. The value 
-		must be between 1 and 32 characters in length and be entered from a standard English (U.S.) keyboard.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaUserPassword -FlashArray 1.1.1.1 -User TESTUSER -Old TESTPWD -New NEWPWD -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaUserPassword()
 {
 	[CmdletBinding()]
@@ -6127,31 +3054,7 @@ function Set-PfaUserPassword()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Password -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Sets the password or public key or refreshes the user permission cache entries for the specified user.
-
-	.DESCRIPTION
-		Sets the password or public key or refreshes the user permission cache entries for the specified user.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER User
-		User to update.
-
-	.PARAMETER PublicKey
-		Changes the public key for SSH access for the specified user. Only system administrators can change public 
-		keys on behalf of other users. If no users are provided as arguments, a request to change the public key will 
-		be for the administrator issuing the request and a request to display set public keys will show all users with 
-		a public key configured.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Set-PfaUserPublicKey -FlashArray 1.1.1.1 -User TESTUSER -PublicKey <string> -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Set-PfaUserPublicKey()
 {
 	[CmdletBinding()]
@@ -6171,25 +3074,7 @@ function Set-PfaUserPublicKey()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PubKey -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Deletes API token for the specified user.	
-
-	.DESCRIPTION
-		Deletes API token for the specified user.	
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER User
-		User to remove the API token.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-	
-	.EXAMPLE
-		PS C:\> Remove-PfaApiToken -FlashArray 1.1.1.1 -User NEWUSER -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Remove-PfaApiToken()
 {
 	[CmdletBinding()]
@@ -6203,22 +3088,7 @@ function Remove-PfaApiToken()
 	$Return =  Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Lists current base configuration information for the directory service.
-
-	.DESCRIPTION
-		Lists current base configuration information for the directory service.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Get-PfaDirectoryService -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDirectoryService()
 {
 	[CmdletBinding()]
@@ -6231,22 +3101,7 @@ function Get-PfaDirectoryService()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Returns information about the group configuration.
-
-	.DESCRIPTION
-		Returns information about the group configuration.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Get-PfaDirectoryServiceGroups -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDirectoryServiceGroups()
 {
 	[CmdletBinding()]
@@ -6259,22 +3114,7 @@ function Get-PfaDirectoryServiceGroups()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Returns information about the currently configured CA certificate data.
-
-	.DESCRIPTION
-		Returns information about the currently configured CA certificate data.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Get-PfaDirectoryServiceCertificate -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaDirectoryServiceCertificate()
 {
 	[CmdletBinding()]
@@ -6287,24 +3127,7 @@ function Get-PfaDirectoryServiceCertificate()
 	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
-<#
-	.SYNOPSIS
-		Tests the current directory service configuration.
-
-	.DESCRIPTION
-		Tests the current directory service configuration; verifies that the URIs can be resolved and that Purity can 
-		bind and query the tree using the bind user credentials. The call also verifies that it can find all the configured 
-		groups to ensure the Common Names and group base are correctly configured.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Test-PfaDirectoryService -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Test-PfaDirectoryService()
 {
 	[CmdletBinding()]
@@ -6323,22 +3146,7 @@ function Test-PfaDirectoryService()
 	return $Return.output
 }
 
-<#
-	.SYNOPSIS
-		Enables directory service support.
-
-	.DESCRIPTION
-		Enables directory service support.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Enable-PfaDirectoryService -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Enable-PfaDirectoryService()
 {
 	[CmdletBinding()]
@@ -6356,22 +3164,7 @@ function Enable-PfaDirectoryService()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Disables directory service support.
-
-	.DESCRIPTION
-		Disables directory service support.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Disable-PfaDirectoryService -FlashArray 1.1.1.1 -Session $MySession
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Disable-PfaDirectoryService()
 {
 	[CmdletBinding()]
@@ -6389,66 +3182,7 @@ function Disable-PfaDirectoryService()
 	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
 }
 
-<#
-	.SYNOPSIS
-		Modifies the directory service configuration.
-
-	.DESCRIPTION
-		Modifies the directory service configuration.
-
-	.PARAMETER FlashArray
-		Pure Storage FlashArray virtual IP address (eg. vir0) or DNS name.
-
-	.PARAMETER LdapUri
-		A list of up to 30 URIs of the directory servers. These must be full URIs including the scheme: 
-		ldap:// or ldaps://. The domain names should be resolvable by configured DNS servers. If the scheme
-		of the URIs is ldaps://, SSL is enabled. SSL is either enabled or disabled globally, so the scheme 
-		of all supplied URIs must be the same. They must also all have the same domain. If base DN is not 
-		configured and a URI is provided, the base DN will automatically default to the Domain Components
-		of the URIs. Standard ports are assumed (389 for ldap, 636 for ldaps). Non-standard ports can be 
-		specified in the URI if they are in use.
-
-	.PARAMETER BaseDN
-		Sets the base of the Distinguished Name (DN) of the directory service groups. The base should consist 
-		of only Domain Components (DCs). The base_dn will populate with a default value when a URI is entered 
-		by parsing domain components from the URI. The base DN should specify DC= for each domain component 
-		and multiple DCs should be separated by commas.
-
-	.PARAMETER GroupBase
-		Specifies where the configured groups are located in the directory tree. This field consists of 
-		Organizational Units (OUs) that combine with the base DN attribute and the configured group CNs to 
-		complete the full Distinguished Name of the groups. The group base should specify OU= for each OU 
-		and multiple OUs should be separated by commas. The order of OUs is important and should get larger 
-		in scope from left to right. Each OU should not exceed 64 characters in length.
-
-	.PARAMETER ArrayAdminGroup
-		Sets the common Name (CN) of the directory service group containing administrators with full privileges 
-		when managing the FlashArray. The name should be just the Common Name of the group without the CN= 
-		specifier. Common Names should not exceed 64 characters in length.
-
-	.PARAMETER StorageAdminGroup
-		Sets the common Name (CN) of the configured directory service group containing administrators with 
-		storage-related privileges on the FlashArray. This name should be just the Common Name of the group 
-		without the CN= specifier. Common Names should not exceed 64 characters in length.
-
-	.PARAMETER ReadOnlyGroup
-		Sets the common Name (CN) of the configured directory service group containing users with read-only 
-		privileges on the FlashArray. This name should be just the Common Name of the group without the CN= 
-		specifier. Common Names should not exceed 64 characters in length.
-
-	.PARAMETER BindUser
-		Sets the user name that can be used to bind to and query the directory. Often referred to as 
-		sAMAccountName or User Logon Name.
-
-	.PARAMETER BindPassword
-		Sets the password of the bind_user user name account.
-
-	.PARAMETER Session
-		The session that has been established using the Connect-PfaController and Get-PfaAPIToken cmdlets.
-
-	.EXAMPLE
-		PS C:\> Update-PfaDirectoryService -FlashArray 1.1.1.1 -LdapUri 'ldap://10.21.8.5' -BaseDN 'DC=csglab,DC=purestorage,DC=com' -GroupBase OU=SAN_Managers -ArrayAdminGroup Pure_Storage_Admins -StorageAdminGroup Pure_Storage_Users -ReadOnlyGroup Pure_Storage_Readers -BindUser USER1 -BindPassword 'pa$$word' -Session $S
-#>
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Update-PfaDirectoryService()
 {
 	[CmdletBinding()]
@@ -6560,13 +3294,13 @@ Export-ModuleMember -function New-PfaProtectionGroupSnapshot
 Export-ModuleMember -function New-PfaProtectionGroup
 Export-ModuleMember -function Remove-PfaProtectionGroup
 Export-ModuleMember -function Eradicate-PfaProtectionGroup
-Export-ModuleMember -function Recover-PfaProtectionGroup
+Export-ModuleMember -function Restore-PfaProtectionGroup
 Export-ModuleMember -function Rename-PfaProtectionGroup
 Export-ModuleMember -function Restore-PfaProtectionGroupVolumeSnapshots
 Set-Alias -Name restorepgsnap -Value Restore-PfaProtectionGroupVolumeSnapshots -Scope Global
 Export-ModuleMember -function Remove-PfaProtectionGroupSnapshots
 Export-ModuleMember -function Eradicate-PfaProtectionGroupSnapshots
-Export-ModuleMember -function Recover-PfaProtectionGroupSnapshots
+Export-ModuleMember -function Restore-PfaProtectionGroupSnapshots
 Export-ModuleMember -function Enable-PfaProtectionGroupReplication
 Export-ModuleMember -function Disable-PfaProtectionGroupReplication
 Export-ModuleMember -function Enable-PfaProtectionGroupSnapshots
@@ -6596,8 +3330,8 @@ Export-ModuleMember -Function Eradicate-PfaVolume
 Set-Alias -Name flushvol -Value Eradicate-PfaVolume -Scope Global
 Export-ModuleMember -function Rename-PfaVolume
 Export-ModuleMember -function Resize-PfaVolume
-Export-ModuleMember -function Recover-PfaVolume
-Export-ModuleMember -function Recover-PfaSnapshot
+Export-ModuleMember -function Restore-PfaVolume
+Export-ModuleMember -function Restore-PfaSnapshot
 Export-ModuleMember -function Get-PfaHosts
 Export-ModuleMember -function Get-PfaHost
 Export-ModuleMember -function New-PfaHost

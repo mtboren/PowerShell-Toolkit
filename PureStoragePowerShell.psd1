@@ -4,7 +4,7 @@
 	 Created by:   	barkz@PureStoragePowerShell.com
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psd1
-	 Version:		2.2.1.302
+	 Version:		2.3.0.305
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -30,13 +30,13 @@
 RootModule = 'PureStoragePowerShell.psm1'
 
 # Version number of this module; major.minor[.build[.revision]]
-ModuleVersion = '2.2.1.302'
+ModuleVersion = '2.3.0.305'
 
 # ID used to uniquely identify this module
 GUID = '80ed4b74-cd66-4428-b4dd-db839991c2d6'
 
 # Author of this module
-Author = 'barkz@PureStoragePowerShell.com'
+Author = 'barkz@PureStorage.com'
 
 # Company or vendor of this module
 CompanyName = 'Pure Storage, Inc.'
@@ -105,8 +105,8 @@ FileList = @()
 PrivateData = ''
 
 # HelpInfo URI of this module
-HelpInfoURI = ''
-
+HelpInfoURI = 'http://www.themicrosoftdude.com/PureStoragePowerShellHelpInfo'
+	
 # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
 DefaultCommandPrefix = ''
 
