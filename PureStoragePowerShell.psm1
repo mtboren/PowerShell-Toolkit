@@ -5,7 +5,7 @@
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.4.2.311
+	 Version:		2.5.0.324
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -35,22 +35,34 @@
 
 function Display-Error()
 {
-	try
+	if (!($_.ErrorDetails))
 	{
-		$Err = ConvertFrom-Json $_.ErrorDetails -ErrorAction 'Ignore'
-		Write-Host "=========================================================================================" -ForegroundColor Red
-		Write-Host "Pure Storage Error:" $Err.msg "(" $Err.ctx ")" -ForegroundColor Red
-		Write-Host "=========================================================================================" -ForegroundColor Red
+		<#
+		[string] $ErrReturn = $Error[0].Exception
+		$ErrReturn += "General Error"
+		$ErrReturn += "`r`n"
+		$ErrReturn += "At line:" + $Error[0].InvocationInfo.ScriptLineNumber
+		$ErrReturn += " char:" + $Error[0].InvocationInfo.OffsetInLine
+		$ErrReturn += " For: " + $Error[0].InvocationInfo.Line
+		#>
+		Return $Error[0].Exception
 	}
-	catch
+	else
 	{
-		Write-Host "=========================================================================================" -ForegroundColor Red
-		Write-Host "Windows PowerShell Error:" $_.ErrorDetails.Message -ForegroundColor Red
-		Write-Host "=========================================================================================" -ForegroundColor Red
-		
+		<#
+		[string] $ErrReturn = (ConvertFrom-Json $_.ErrorDetails)
+		$ErrReturn += "Pure Storage REST API Error"
+		$ErrReturn += "`r`n"
+		$ErrReturn += "At line:" + $_.InvocationInfo.ScriptLineNumber
+		$ErrReturn += " char:" + $_.InvocationInfo.OffsetInLine
+		$ErrReturn += " For: " + $_.InvocationInfo.Line
+		#>
+		$ctx = ConvertFrom-Json $_.ErrorDetails
+		$ErrReturn = "Pure Storage REST API: "
+		$ErrReturn += $ctx.msg + "(" + $ctx.ctx + ")"
+		Write-Host $ErrReturn -ForegroundColor 'Red' -BackgroundColor 'Black'
 	}
 }
-
 
 #endregion
 
@@ -77,8 +89,16 @@ function Get-WindowsPowerScheme()
 	Param (
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ComputerName
 	)
-	$PowerScheme = Get-WmiObject -Class WIN32_PowerPlan -Namespace "root\cimv2\power" -ComputerName $ComputerName -Filter "isActive='true'"
-	Write-Host $ComputerName "is set to" $PowerScheme.ElementName
+	
+	try
+	{
+		$PowerScheme = Get-WmiObject -Class WIN32_PowerPlan -Namespace "root\cimv2\power" -ComputerName $ComputerName -Filter "isActive='true'"
+		Write-Host $ComputerName "is set to" $PowerScheme.ElementName
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -215,9 +235,9 @@ function Get-PfaApiVersion()
 		$global:PureStorageRestApi = $Return.Version.Item($Return.Version.Count - 1).ToString()
 		$global:PureStorageURIBase = "https://$FlashArray/api/$global:PureStorageRestApi"
 	}
-	Catch
+	catch
 	{
-		Throw "Cannot retrieve Pure Storage FlashArray ($FlashArray) REST API version."
+		Display-Error
 	}
 }
 
@@ -227,8 +247,7 @@ function Get-PfaApiToken()
 	[CmdletBinding()]
 	Param (
 		[Parameter(Mandatory = $True, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray,
-		[Parameter(Mandatory = $True, Position = 1)][ValidateNotNullOrEmpty()][string] $Username,
-		[Parameter(Mandatory = $True, Position = 2)][ValidateNotNullOrEmpty()][string] $Password,
+		[Parameter(Mandatory = $True, Position = 1)][ValidateNotNullOrEmpty()][PSCredential] $Credential,
 		[ValidateSet('1.0', '1.1', '1.2', '1.3', '1.4')][string]$RESTAPI = "1.4"
 	)
 	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -237,11 +256,15 @@ function Get-PfaApiToken()
 	{
 		if (-not (Test-Connection -ComputerName $FlashArray -Quiet))
 		{
-			Throw "Cannot contact Pure Storage FlashArray ($FlashArray)."
+			Display-Error
 		}
 		else
 		{
-			$AuthAction = @{ username = $Username; password = $Password }
+			$AuthAction = @{
+				username = $Credential.GetNetWorkCredential().Username
+				password = $Credential.GetNetWorkCredential().Password
+			}
+			$global:FlashArray = $FlashArray
 			$global:PureStorageURIBase = "https://$FlashArray/api/$RESTAPI"
 			
 			try
@@ -251,13 +274,13 @@ function Get-PfaApiToken()
 			}
 			Catch
 			{
-				Throw "Error retrieving API Token from Pure Storage FlashArray ($FlashArray) with $Username."
+				Display-Error
 			}
 		}
 	}
 	Catch
 	{
-		Throw "Cannot contact Pure Storage FlashArray ($FlashArray)."
+		Display-Error
 	}
 }
 
@@ -266,7 +289,7 @@ function Connect-PfaController()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True, Position = 1, ValueFromPipelineByPropertyName = $True)][ValidateNotNullOrEmpty()][string] $API_Token
 	)
 	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -278,13 +301,11 @@ function Connect-PfaController()
 		$Uri = "$PureStorageURIBase/auth/session"
 		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SessionAuthentication -SessionVariable Session
 		$Session
-		Get-PfaApiVersion -FlashArray $FlashArray -Session $Session
-
+		Get-PfaApiVersion -FlashArray $global:FlashArray -Session $Session
 	}
 	Catch
 	{
-		
-		Throw "Error creating REST session with Pure Storage FlashArray ($FlashArray)."
+		Display-Error
 	}
 }
 
@@ -293,7 +314,7 @@ function Disconnect-PfaController()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
@@ -302,10 +323,10 @@ function Disconnect-PfaController()
 		$Uri = "$PureStorageURIBase/auth/session"
 		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session
 	}
-	Catch
+	catch
 	{
 		
-		Throw "Error disconnecting from the Pure Storage FlashArray ($FlashArray)."
+		Display-Error
 	}
 	
 }
@@ -376,12 +397,19 @@ function Watch-PfaPerformance()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/array" + "?action=monitor"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 	
+	try
+	{
+		$Uri = "$PureStorageURIBase/array" + "?action=monitor"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -389,16 +417,23 @@ function Get-PfaArray
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Array = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array" -WebSession $Session
-	
-	New-Object -TypeName PSObject -Property @{
-		"Version" = $array.version
-		"Revision" = $array.revision
-		"Name" = $array.array_name
-		"ID" = $array.id
+	try
+	{
+		$Array = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array" -WebSession $Session
+		
+		New-Object -TypeName PSObject -Property @{
+			"Version" = $array.version
+			"Revision" = $array.revision
+			"Name" = $array.array_name
+			"ID" = $array.id
+		}
+	}
+	catch
+	{
+		Display-Error
 	}
 }
 
@@ -407,12 +442,20 @@ function Get-PfaHistoricalPerformance()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateSet('1h', '3h', '24h', '7d', '30d', '90d', '1y')][string]$TimePeriod,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/array" + "?action=monitor&historical=$TimePeriod"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/array" + "?action=monitor&historical=$TimePeriod"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -420,40 +463,48 @@ function Get-PfaConfiguration
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Array = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array" -WebSession $Session
-	$Banner = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?banner=true" -WebSession $Session
-	$Idle_timeout = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?idle_timeout=true" -WebSession $Session
-	$NTPServer = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?ntpserver=true" -WebSession $Session
-	$PhoneHomeStatus = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?phonehome=true" -WebSession $Session
-	$Proxy = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?proxy=true" -WebSession $Session
-	$RelayHost = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?relayhost=true" -WebSession $Session
-	$SCSItimeout = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?scsi_timeout=true" -WebSession $Session
-	$SenderDomain = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?senderdomain=true" -WebSession $Session
-	$SpaceStats = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?space=true" -WebSession $Session
-	$SyslogServer = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?syslogserver=true" -WebSession $Session
-	$Controllers = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?controllers=true" -WebSession $Session
-	$ConnectionKey = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?connection_key=true" -WebSession $Session
 	
-	New-Object -TypeName PSObject -Property @{
-		"Version" = $array.version
-		"Revision" = $array.revision
-		"Name" = $array.array_name
-		"ID" = $array.id
-		"Banner" = $banner.banner
-		"Controllers" = $controllers
-		"IdleTimeout" = $idle_timeout.idle_timeout
-		"NTPServer" = $ntpServer.ntpserver
-		"PhoneHomeStatus" = $phoneHomeStatus.phonehome
-		"Proxy" = $proxy.proxy
-		"RelayHost" = $relayHost.relayhost
-		"SCSITimeout" = $SCSItimeout.scsitimeout
-		"SenderDomain" = $senderDomain.senderdomain
-		"SpaceStats" = $spaceStats
-		"SyslogServer" = $syslogServer.syslogserver
-		"ConnectionKey" = $ConnectionKey.connection_key
+	try
+	{
+		$Array = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array" -WebSession $Session
+		$Banner = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?banner=true" -WebSession $Session
+		$Idle_timeout = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?idle_timeout=true" -WebSession $Session
+		$NTPServer = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?ntpserver=true" -WebSession $Session
+		$PhoneHomeStatus = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?phonehome=true" -WebSession $Session
+		$Proxy = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?proxy=true" -WebSession $Session
+		$RelayHost = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?relayhost=true" -WebSession $Session
+		$SCSItimeout = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?scsi_timeout=true" -WebSession $Session
+		$SenderDomain = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?senderdomain=true" -WebSession $Session
+		$SpaceStats = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?space=true" -WebSession $Session
+		$SyslogServer = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?syslogserver=true" -WebSession $Session
+		$Controllers = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?controllers=true" -WebSession $Session
+		$ConnectionKey = Invoke-RestMethod -Method GET -Uri "$PureStorageURIBase/array?connection_key=true" -WebSession $Session
+		
+		New-Object -TypeName PSObject -Property @{
+			"Version" = $array.version
+			"Revision" = $array.revision
+			"Name" = $array.array_name
+			"ID" = $array.id
+			"Banner" = $banner.banner
+			"Controllers" = $controllers
+			"IdleTimeout" = $idle_timeout.idle_timeout
+			"NTPServer" = $ntpServer.ntpserver
+			"PhoneHomeStatus" = $phoneHomeStatus.phonehome
+			"Proxy" = $proxy.proxy
+			"RelayHost" = $relayHost.relayhost
+			"SCSITimeout" = $SCSItimeout.scsitimeout
+			"SenderDomain" = $senderDomain.senderdomain
+			"SpaceStats" = $spaceStats
+			"SyslogServer" = $syslogServer.syslogserver
+			"ConnectionKey" = $ConnectionKey.connection_key
+		}
+	}
+	catch
+	{
+		Display-Error
 	}
 }
 
@@ -462,12 +513,19 @@ function Get-PfaSpace
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$uri = "$PureStorageURIBase/array?space=true"
-	Invoke-RestMethod -Method GET -Uri $uri -WebSession $Session
+	try
+	{
+		$uri = "$PureStorageURIBase/array?space=true"
+		Invoke-RestMethod -Method GET -Uri $uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -475,12 +533,19 @@ function Get-PfaConnection
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/connection"
-	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/connection"
+		Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -488,12 +553,19 @@ function Get-PfaConsoleLock
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/console_lock"
-	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/console_lock"
+		Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -501,12 +573,19 @@ function Get-PfaPhoneHome
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/phonehome"
-	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/phonehome"
+		Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -514,12 +593,19 @@ function Get-PfaRemoteAssist
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/remoteassist"
-	Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/remoteassist"
+		Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -527,7 +613,7 @@ function New-PfaConnection
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ManagementAddress,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ConnectionKey,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $ReplicationAddress,
@@ -535,16 +621,23 @@ function New-PfaConnection
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$ArrayConnection = $null
-	$ArrayConnection = [ordered]@{
-		management_address = $ManagementAddress
-		connection_key = $ConnectionKey
-		replication_address = $ReplicationAddress
-		type = [Object[]]"replication"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/array/connection"
-	Invoke-RestMethod -Method POST -Uri $Uri -Body $ArrayConnection -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$ArrayConnection = $null
+		$ArrayConnection = [ordered]@{
+			management_address = $ManagementAddress
+			connection_key = $ConnectionKey
+			replication_address = $ReplicationAddress
+			type = [Object[]]"replication"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/array/connection"
+		Invoke-RestMethod -Method POST -Uri $Uri -Body $ArrayConnection -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -552,13 +645,20 @@ function Remove-PfaConnection
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/connection/$Name"
-	Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/connection/$Name"
+		Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -566,13 +666,20 @@ function Set-PfaBanner
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Banner,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-
-	$Uri = "$PureStorageURIBase/array?banner=$Banner"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?banner=$Banner"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -580,13 +687,20 @@ function Set-PfaIdleTimeout
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][int] $IdleTimeout,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?idle_timeout=$IdleTimeout"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?idle_timeout=$IdleTimeout"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -594,13 +708,20 @@ function Set-PfaName
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?name=$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?name=$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -608,17 +729,24 @@ function Set-PfaNtpServer
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string[]] $Servers,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$AddNtpServer = $null
-	$AddNtpServer = @{
-		ntpserver = [Object[]]$Servers
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/array?ntpserver"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddNtpServer -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$AddNtpServer = $null
+		$AddNtpServer = @{
+			ntpserver = [Object[]]$Servers
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/array?ntpserver"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddNtpServer -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -626,13 +754,20 @@ function Set-PfaProxy
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?proxy=$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?proxy=$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -640,13 +775,20 @@ function Set-PfaRelayHost
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?relayhost=$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?relayhost=$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -654,13 +796,20 @@ function Set-PfaScsiTimeout
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][int] $Timeout,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?scsi_timeout=$Timeout"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?scsi_timeout=$Timeout"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -668,13 +817,20 @@ function Set-PfaSenderDomain
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array?senderdomain=$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	try
+	{
+		$Uri = "$PureStorageURIBase/array?senderdomain=$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -682,17 +838,24 @@ function Set-PfaSyslogServer
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Servers,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$AddSyslogServer = $null
-	$AddSyslogServer = @{
-		syslogserver = [Object[]]$Servers
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/array?syslogserver"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddSyslogServer -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$AddSyslogServer = $null
+		$AddSyslogServer = @{
+			syslogserver = [Object[]]$Servers
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/array?syslogserver"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddSyslogServer -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -700,12 +863,19 @@ function Enable-PfaConsoleLock
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-
-	$Uri = "$PureStorageURIBase/array/console_lock?enabled=true"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/console_lock?enabled=true"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -713,12 +883,19 @@ function Disable-PfaConsoleLock
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/console_lock?enabled=false"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/console_lock?enabled=false"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -726,12 +903,19 @@ function Enable-PfaPhonehome
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/phonehome?enabled=true"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/phonehome?enabled=true"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -739,12 +923,19 @@ function Disable-PfaPhonehome
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/phonehome?enabled=false"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/phonehome?enabled=false"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -752,21 +943,28 @@ function Send-PfaPhonehomeLogs()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateSet('All', 'Today', 'Yesterday', 'Cancel')][string]$TimePeriod,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	switch ($TimePeriod)
+	try
 	{
-		"All" { $Action = "send_all" }
-		"Today" { $Action = "send_today" }
-		"Yesterday" { $Action = "send_yesterday" }
-		"Cancel" { $Action = "cancel" }
+		switch ($TimePeriod)
+		{
+			"All" { $Action = "send_all" }
+			"Today" { $Action = "send_today" }
+			"Yesterday" { $Action = "send_yesterday" }
+			"Cancel" { $Action = "cancel" }
+		}
+		
+		$Uri = "$PureStorageURIBase/array/phonehome" + "?action=$Action"
+		$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	
-	$Uri = "$PureStorageURIBase/array/phonehome" + "?action=$Action"
-	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json")
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -774,12 +972,19 @@ function Connect-PfaRemoteAssist
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/remoteassist?action=connect"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/remoteassist?action=connect"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -787,12 +992,19 @@ function Disconnect-PfaRemoteAssist
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/array/remoteassist?action=disconnect"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/array/remoteassist?action=disconnect"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -805,11 +1017,19 @@ function Get-PfaVolumes()
 
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -817,11 +1037,19 @@ function Get-PfaPendingVolumes()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume?pending=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume?pending=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -829,11 +1057,19 @@ function Get-PfaPendingOnlyVolumes()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume?pending_only=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume?pending_only=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -841,11 +1077,19 @@ function Get-PfaSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume?snap=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume?snap=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -853,11 +1097,19 @@ function Get-PfaVolumesSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume?space=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume?space=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -865,12 +1117,20 @@ function Watch-PfaVolumePerformance()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume/$Name" + "?action=monitor"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Name" + "?action=monitor"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 	
 }
 
@@ -879,13 +1139,21 @@ function Get-PfaHistoricalVolumePerformance()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateSet('1h', '3h', '24h', '7d', '30d', '90d', '1y')][string]$TimePeriod,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/volume/$Name" + "?action=monitor&historical=$TimePeriod"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Name" + "?action=monitor&historical=$TimePeriod"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -893,7 +1161,7 @@ function Get-PfaVolume()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -914,7 +1182,7 @@ function Get-PfaVolumeSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -935,7 +1203,7 @@ function Get-PfaVolumeSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -956,7 +1224,7 @@ function Get-PfaVolumeSharedConnections()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -977,7 +1245,7 @@ function Get-PfaVolumePrivateConnections()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -998,13 +1266,14 @@ function Get-PfaVolumeDiff()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $BlockSize,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Length,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Offset,	
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
+	
 	If (!$Offset)
 	{
 		$Uri = "$PureStorageURIBase/volume/$Name" + "/diff?block_size=$BlockSize&length=$Length"
@@ -1013,15 +1282,23 @@ function Get-PfaVolumeDiff()
 	{
 		$Uri = "$PureStorageURIBase/volume/$Name" + "/diff?block_size=$BlockSize&length=$Length&offset=$Offset"
 	}
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function New-PfaVolume()
-{
+{	
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Size,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Source,
@@ -1042,7 +1319,15 @@ function New-PfaVolume()
 		} | ConvertTo-Json
 	}
 	$Uri = "$PureStorageURIBase/volume/$Name"
-	Invoke-RestMethod -Method Post -Uri $Uri -Body $Volume -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		Invoke-RestMethod -Method Post -Uri $Uri -Body $Volume -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1050,7 +1335,7 @@ function Update-PfaVolume()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Source,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -1060,8 +1345,16 @@ function Update-PfaVolume()
 		overwrite = "true"
 		source = $Source
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/volume/$Name"
-	Invoke-RestMethod -Method Post -Uri $Uri -Body $Json -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Name"
+		Invoke-RestMethod -Method Post -Uri $Uri -Body $Json -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1069,21 +1362,29 @@ function New-PfaSnapshot()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string[]] $Volumes,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Suffix,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	foreach ($Volume in $Volumes)
+	
+	try
 	{
-		$Snapshot = $null
-		$Snapshot = [ordered]@{
-			snap = "true"
-			source = [Object[]]"$Volume"
-			suffix = $Suffix
-		} | ConvertTo-Json
-		$Uri = "$PureStorageURIBase/volume"
-		Invoke-RestMethod -Method Post -Uri $Uri -Body $Snapshot -WebSession $Session -ContentType "application/json"
+		foreach ($Volume in $Volumes)
+		{
+			$Snapshot = $null
+			$Snapshot = [ordered]@{
+				snap = "true"
+				source = [Object[]]"$Volume"
+				suffix = $Suffix
+			} | ConvertTo-Json
+			$Uri = "$PureStorageURIBase/volume"
+			Invoke-RestMethod -Method Post -Uri $Uri -Body $Snapshot -WebSession $Session -ContentType "application/json"
+		}
+	}
+	catch
+	{
+		Display-Error
 	}
 }
 
@@ -1092,7 +1393,7 @@ function Remove-PfaVolume()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Eradicate,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -1136,7 +1437,7 @@ function Remove-PfaSnapshot()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -1147,7 +1448,7 @@ function Remove-PfaSnapshot()
 	}
 	catch
 	{
-		Throw ("Error removing snapshot ($Name).")
+		Display-Error
 	}
 }
 
@@ -1156,7 +1457,7 @@ function Rename-PfaVolume
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $CurrentName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $NewName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -1164,8 +1465,16 @@ function Rename-PfaVolume
 	$Rename = @{
 		name ="$New"
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/volume/$Old"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Rename -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Old"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Rename -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1173,7 +1482,7 @@ function Resize-PfaVolume
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Size,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Truncate,
@@ -1218,24 +1527,7 @@ function Restore-PfaVolume
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
-	)
-	
-	$Recover = @{
-		action = "recover"
-	} | ConvertTo-Json 
-	$Uri = "$PureStorageURIBase/volume/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Recover -WebSession $Session -ContentType "application/json"
-}
-
-#.ExternalHelp PureStoragePowerShell.psm1-help.xml
-function Restore-PfaSnapshot
-{
-	[CmdletBinding()]
-	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -1243,8 +1535,41 @@ function Restore-PfaSnapshot
 	$Recover = @{
 		action = "recover"
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/volume/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Recover -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Recover -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
+}
+
+#.ExternalHelp PureStoragePowerShell.psm1-help.xml
+function Restore-PfaSnapshot
+{
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
+		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+	)
+	
+	$Recover = @{
+		action = "recover"
+	} | ConvertTo-Json
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/volume/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Recover -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -1256,7 +1581,7 @@ function Get-PfaHosts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateSet('Chap', 'Personality', 'Space')][string]$Display,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -1269,7 +1594,14 @@ function Get-PfaHosts()
 		default { $Uri = "$PureStorageURIBase/host" }
 	}
 	
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1277,7 +1609,7 @@ function Get-PfaHost()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateSet('Chap', 'Personality', 'Space')][string]$Display,
 		[Parameter(Mandatory = $False)][ValidateSet('All', 'Shared', 'Private')][string]$Volume,
@@ -1310,7 +1642,15 @@ function Get-PfaHost()
 			}
 		}
 	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1318,44 +1658,51 @@ function New-PfaHost()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $IQNList,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $WWNList,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	if ($IQNList)
+	try
 	{
-		$NewHost = $null
-		$NewHost = @{
-			iqnlist = [Object[]]$IQNList
-		} | ConvertTo-Json
-		$Uri = "$PureStorageURIBase/host/$Name"
-		Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHost -WebSession $Session -ContentType "application/json"
+		if ($IQNList)
+		{
+			$NewHost = $null
+			$NewHost = @{
+				iqnlist = [Object[]]$IQNList
+			} | ConvertTo-Json
+			$Uri = "$PureStorageURIBase/host/$Name"
+			Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHost -WebSession $Session -ContentType "application/json"
+		}
+		elseif ($WWNList)
+		{
+			$NewHost = $null
+			$NewHost = @{
+				wwnlist = [Object[]]$WWNList
+			} | ConvertTo-Json
+			$Uri = "$PureStorageURIBase/host/$Name"
+			Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHost -WebSession $Session -ContentType "application/json"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/host/$Name"
+			Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session
+		}
 	}
-	elseif ($WWNList)
+	catch
 	{
-		$NewHost = $null
-		$NewHost = @{
-			wwnlist = [Object[]]$WWNList
-		} | ConvertTo-Json
-		$Uri = "$PureStorageURIBase/host/$Name"
-		Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHost -WebSession $Session -ContentType "application/json"
-	}
-	else
-	{
-		$Uri = "$PureStorageURIBase/host/$Name"
-		Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session
+		Display-Error
 	}
 }
-
+	
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Connect-PfaHost()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -1365,8 +1712,16 @@ function Connect-PfaHost()
 		name = $Name
 		vol = $Volume
 	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
-	Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/host/$Name/volume/$Volume"
+		Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1374,7 +1729,7 @@ function Connect-PfaVolume()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -1400,7 +1755,7 @@ function Disconnect-PfaVolume()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Host = $null,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $HostGroup = $null,
@@ -1417,7 +1772,15 @@ function Disconnect-PfaVolume()
 			$Uri = "$PureStorageURIBase/hgroup/$HostGroup/volume/$Volume"
 		}
 	}
-	$Return = Invoke-RestMethod -Method Delete -Uri $Uri -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Return = Invoke-RestMethod -Method Delete -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1425,19 +1788,20 @@ function Remove-PfaHost()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	#try
-	#{
+	
+	try
+	{
 		$Uri = "$PureStorageURIBase/host/$Name"
 		$Return = Invoke-RestMethod -Method Delete -Uri $Uri -WebSession $Session
-	#}
-	#catch
-	#{
-#		Throw ("Error removing host ($Name).")
-#	}
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -1449,34 +1813,42 @@ function Get-PfaHostGroups()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Name = $null,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Space,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	If ($Name)
+	
+	try
 	{
-		If (!$Space)
+		If ($Name)
 		{
-			$Uri = "$PureStorageURIBase/hgroup/$Name"
+			If (!$Space)
+			{
+				$Uri = "$PureStorageURIBase/hgroup/$Name"
+			}
+			else
+			{
+				$Uri = "$PureStorageURIBase/hgroup/$Name" + "?space=true"
+			}
 		}
-		else
+		Else
 		{
-			$Uri = "$PureStorageURIBase/hgroup/$Name" + "?space=true"
+			If (!$Space)
+			{
+				$Uri = "$PureStorageURIBase/hgroup"
+			}
+			else
+			{
+				$Uri = "$PureStorageURIBase/hgroup?space=true"
+			}
 		}
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	Else
+	catch
 	{
-		If (!$Space)
-		{
-			$Uri = "$PureStorageURIBase/hgroup"
-		}
-		else
-		{
-			$Uri = "$PureStorageURIBase/hgroup?space=true"
-		}
+		Display-Error
 	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1484,13 +1856,20 @@ function Get-PfaHostGroupVolumes()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/hgroup/$Name" + "/volume"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/hgroup/$Name" + "/volume"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1498,25 +1877,32 @@ function New-PfaHostGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostList,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	if ($HostList)
+	try
 	{
-		$NewHostList = $null
-		$NewHostList = @{
-			hostlist = [Object[]]$HostList
-		} | ConvertTo-Json
-		$Uri = "$PureStorageURIBase/hgroup/$Name"
-		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHostList -WebSession $Session -ContentType "application/json"
+		if ($HostList)
+		{
+			$NewHostList = $null
+			$NewHostList = @{
+				hostlist = [Object[]]$HostList
+			} | ConvertTo-Json
+			$Uri = "$PureStorageURIBase/hgroup/$Name"
+			$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $NewHostList -WebSession $Session -ContentType "application/json"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/hgroup/$Name"
+			$Return = Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session
+		}
 	}
-	else
+	catch
 	{
-		$Uri = "$PureStorageURIBase/hgroup/$Name"
-		$Return = Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session
+		Display-Error
 	}
 }
 
@@ -1525,13 +1911,21 @@ function Connect-PfaHostGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/hgroup/$Name/volume/$Volume"
-	$Return = Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/hgroup/$Name/volume/$Volume"
+		$Return = Invoke-RestMethod -Method Post -Uri $Uri -Body $HostConnect -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1539,18 +1933,25 @@ function Add-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostList,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$AddHostList = $null
-	$AddHostList = @{
-		addhostlist = [Object[]]$HostList
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/hgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddHostList -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$AddHostList = $null
+		$AddHostList = @{
+			addhostlist = [Object[]]$HostList
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/hgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $AddHostList -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1558,18 +1959,25 @@ function Remove-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostList,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$RemoveHostList = $null
-	$RemoveHostList = @{
-		remhostlist = [Object[]]$HostList
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/hgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $RemoveHostList -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$RemoveHostList = $null
+		$RemoveHostList = @{
+			remhostlist = [Object[]]$HostList
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/hgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $RemoveHostList -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1577,18 +1985,25 @@ function Update-PfaHostGroupHosts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostList,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$ReplaceHostList = $null
-	$ReplaceHostList = @{
-		hostlist = [Object[]]$HostList
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/hgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $ReplaceHostList -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$ReplaceHostList = $null
+		$ReplaceHostList = @{
+			hostlist = [Object[]]$HostList
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/hgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $ReplaceHostList -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1596,17 +2011,24 @@ function Rename-PfaHostGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $NewName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$UpdateName = @{
-		name = $NewName
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/hgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateName -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$UpdateName = @{
+			name = $NewName
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/hgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateName -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1614,13 +2036,20 @@ function Remove-PfaHostGroup
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/hgroup/$Name"
-	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/hgroup/$Name"
+		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1628,14 +2057,21 @@ function Disconnect-PfaHostGroupVolume
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Volume,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/hgroup/$Name" + "/volume/$Volume"
-	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/hgroup/$Name" + "/volume/$Volume"
+		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -1647,12 +2083,19 @@ function Get-PfaProtectionGroups()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup"
-	Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup"
+		Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1660,25 +2103,32 @@ function Get-PfaProtectionGroupsSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Source,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Target,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($Source)
+	try
 	{
-		$Uri = "$PureStorageURIBase/pgroup?space=true&source=true&total=true"
+		If ($Source)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?space=true&source=true&total=true"
+		}
+		elseif ($Target)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?space=true&target=true&total=true"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/pgroup?space=true&total=true"
+		}
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	elseif ($Target)
+	catch
 	{
-		$Uri = "$PureStorageURIBase/pgroup?space=true&target=true&total=true"
+		Display-Error
 	}
-	else
-	{
-		$Uri = "$PureStorageURIBase/pgroup?space=true&total=true"
-	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1686,25 +2136,32 @@ function Get-PfaProtectionGroupsSnapshotSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Source,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Target,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($Source)
+	try
 	{
-		$Uri = "$PureStorageURIBase/pgroup?snap=true&space=true&source=true"
+		If ($Source)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?snap=true&space=true&source=true"
+		}
+		elseif ($Target)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?snap=true&space=true&target=true"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/pgroup?space=true"
+		}
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	elseif ($Target)
+	catch
 	{
-		$Uri = "$PureStorageURIBase/pgroup?snap=true&space=true&target=true"
+		Display-Error
 	}
-	else
-	{
-		$Uri = "$PureStorageURIBase/pgroup?space=true"
-	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1712,12 +2169,19 @@ function Get-PfaProtectionGroupsTransferStatisics()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup?snap=true&transfer=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup?snap=true&transfer=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1725,12 +2189,20 @@ function Get-PfaProtectionGroupsPending()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup?pending=true"
-	$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
-	return $Return | Where-Object { $_.time_remaining }
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup?pending=true"
+		$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+		return $Return | Where-Object { $_.time_remaining }
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1738,25 +2210,32 @@ function Get-PfaProtectionGroupsSchedule()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Source,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Target,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($Source)
+	try
 	{
-		$Uri = "$PureStorageURIBase/pgroup?retention=true&schedule=true&source=true"
+		If ($Source)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?retention=true&schedule=true&source=true"
+		}
+		elseif ($Target)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?retention=true&schedule=true&target=true"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/pgroup?schedule=true"
+		}
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	elseif ($Target)
+	catch
 	{
-		$Uri = "$PureStorageURIBase/pgroup?retention=true&schedule=true&target=true"
+		Display-Error
 	}
-	else
-	{
-		$Uri = "$PureStorageURIBase/pgroup?schedule=true"
-	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1764,25 +2243,32 @@ function Get-PfaProtectionGroupsRetentionPolicy()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Source,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Target,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($Source)
+	try
 	{
-		$Uri = "$PureStorageURIBase/pgroup?retention=true&source=true"
+		If ($Source)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?retention=true&source=true"
+		}
+		elseif ($Target)
+		{
+			$Uri = "$PureStorageURIBase/pgroup?retention=true&target=true"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/pgroup?retention=true"
+		}	
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	elseif ($Target)
+	catch
 	{
-		$Uri = "$PureStorageURIBase/pgroup?retention=true&target=true"
+		Display-Error
 	}
-	else
-	{
-		$Uri = "$PureStorageURIBase/pgroup?retention=true"
-	}	
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1790,11 +2276,19 @@ function Get-PfaProtectionGroupsPendingOnly()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup?pending_only=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup?pending_only=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1805,8 +2299,16 @@ function Get-PfaProtectionGroupsSnapshots()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup?snap=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup?snap=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1814,13 +2316,20 @@ function Get-PfaProtectionGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1828,7 +2337,7 @@ function Get-PfaProtectionGroupSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][switch] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -1849,13 +2358,20 @@ function Get-PfaProtectionGroupSnapshotSpace()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][switch] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?space=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?space=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1863,13 +2379,20 @@ function Get-PfaProtectionGroupTransferStatisics()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?snap=true&transfer=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?snap=true&transfer=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1877,13 +2400,21 @@ function Get-PfaProtectionGroupPending()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?pending=true"
-	$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
-	return $Return | Where-Object { $_.time_remaining }
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?pending=true"
+		$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+		return $Return | Where-Object { $_.time_remaining }
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1891,13 +2422,20 @@ function Get-PfaProtectionGroupSchedule()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?schedule=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?schedule=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1905,13 +2443,20 @@ function Get-PfaProtectionGroupRetentionPolicy()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?retention=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?retention=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1919,12 +2464,20 @@ function Get-PfaProtectionGroupPendingOnly()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?pending_only=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?pending_only=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1932,12 +2485,20 @@ function Get-PfaProtectionGroupSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/pgroup/$Name" + "?snap=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/pgroup/$Name" + "?snap=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -1945,60 +2506,67 @@ function New-PfaProtectionGroupSnapshot()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ProtectionGroupName,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $SnapshotSuffix,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $ReplicateNow,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$ProtectionGroupSnapshot = $null
-	if (!$SnapshotSuffix)
+	try
 	{
-		if (!$ReplicateNow)
+		$ProtectionGroupSnapshot = $null
+		if (!$SnapshotSuffix)
 		{
-			$ProtectionGroupSnapshot = [ordered]@{
-				apply_retention = "true"	
-				snap = "true"
-				source = [Object[]]$ProtectionGroupName
-			} | ConvertTo-Json
+			if (!$ReplicateNow)
+			{
+				$ProtectionGroupSnapshot = [ordered]@{
+					apply_retention = "true"	
+					snap = "true"
+					source = [Object[]]$ProtectionGroupName
+				} | ConvertTo-Json
+			}
+			else
+			{
+				$ProtectionGroupSnapshot = [ordered]@{
+					apply_retention = "true"
+					replicate_now = "true"
+					snap = "true"
+					source = [Object[]]$ProtectionGroupName
+				} | ConvertTo-Json
+			}
 		}
 		else
 		{
-			$ProtectionGroupSnapshot = [ordered]@{
-				apply_retention = "true"
-				replicate_now = "true"
-				snap = "true"
-				source = [Object[]]$ProtectionGroupName
-			} | ConvertTo-Json
+			if (!$ReplicateNow)
+			{
+				$ProtectionGroupSnapshot = [ordered]@{
+					apply_retention = "true"
+					snap = "true"
+					source = [Object[]]$ProtectionGroupName
+					suffix = $SnapshotSuffix
+				} | ConvertTo-Json
+			}
+			else
+			{
+				$ProtectionGroupSnapshot = [ordered]@{
+					apply_retention = "true"
+					replicate_now = "true"
+					snap = "true"
+					source = [Object[]]$ProtectionGroupName
+					suffix = $SnapshotSuffix
+				} | ConvertTo-Json
+			}
+			
 		}
-	}
-	else
-	{
-		if (!$ReplicateNow)
-		{
-			$ProtectionGroupSnapshot = [ordered]@{
-				apply_retention = "true"
-				snap = "true"
-				source = [Object[]]$ProtectionGroupName
-				suffix = $SnapshotSuffix
-			} | ConvertTo-Json
-		}
-		else
-		{
-			$ProtectionGroupSnapshot = [ordered]@{
-				apply_retention = "true"
-				replicate_now = "true"
-				snap = "true"
-				source = [Object[]]$ProtectionGroupName
-				suffix = $SnapshotSuffix
-			} | ConvertTo-Json
-		}
-		
-	}
 	
-	$Uri = "$PureStorageURIBase/pgroup"
-	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroupSnapshot -WebSession $Session -ContentType "application/json"
+		$Uri = "$PureStorageURIBase/pgroup"
+		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroupSnapshot -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2006,7 +2574,7 @@ function New-PfaProtectionGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostGroups,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $Hosts,
@@ -2015,53 +2583,60 @@ function New-PfaProtectionGroup()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$ProtectionGroup = $null
+	try
+	{
+		$ProtectionGroup = $null
+		
+		if ($HostGroups -And $ReplicationTargets)
+		{
+			$ProtectionGroup = [ordered]@{
+				hgrouplist = [Object[]]$HostGroups
+				targetlist = [Object[]]$ReplicationTargets
+			} | ConvertTo-Json
+		}
+		elseif ($HostGroups)
+		{
+			$ProtectionGroup = [ordered]@{
+				hgrouplist = [Object[]]$HostGroups
+			} | ConvertTo-Json
+		}
+		
+		if ($Hosts -And $ReplicationTargets)
+		{
+			$ProtectionGroup = [ordered]@{
+				hostlist = [Object[]]$Hosts
+				targetlist = [Object[]]$ReplicationTargets
+			} | ConvertTo-Json
+		}
+		elseif ($Hosts)
+		{
+			$ProtectionGroup = [ordered]@{
+				hostlist = [Object[]]$Hosts
+			} | ConvertTo-Json
+		}
+		
+		
+		if ($Volumes -And $ReplicationTargets)
+		{
+			$ProtectionGroup = [ordered]@{
+				vollist = [Object[]]$Volumes
+				targetlist = [Object[]]$ReplicationTargets
+			} | ConvertTo-Json
+		}
+		elseif ($Volumes)
+		{
+			$ProtectionGroup = [ordered]@{
+				vollist = [Object[]]$Volumes
+			} | ConvertTo-Json
+		}
 	
-	if ($HostGroups -And $ReplicationTargets)
-	{
-		$ProtectionGroup = [ordered]@{
-			hgrouplist = [Object[]]$HostGroups
-			targetlist = [Object[]]$ReplicationTargets
-		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
 	}
-	elseif ($HostGroups)
+	catch
 	{
-		$ProtectionGroup = [ordered]@{
-			hgrouplist = [Object[]]$HostGroups
-		} | ConvertTo-Json
+		Display-Error
 	}
-	
-	if ($Hosts -And $ReplicationTargets)
-	{
-		$ProtectionGroup = [ordered]@{
-			hostlist = [Object[]]$Hosts
-			targetlist = [Object[]]$ReplicationTargets
-		} | ConvertTo-Json
-	}
-	elseif ($Hosts)
-	{
-		$ProtectionGroup = [ordered]@{
-			hostlist = [Object[]]$Hosts
-		} | ConvertTo-Json
-	}
-	
-	
-	if ($Volumes -And $ReplicationTargets)
-	{
-		$ProtectionGroup = [ordered]@{
-			vollist = [Object[]]$Volumes
-			targetlist = [Object[]]$ReplicationTargets
-		} | ConvertTo-Json
-	}
-	elseif ($Volumes)
-	{
-		$ProtectionGroup = [ordered]@{
-			vollist = [Object[]]$Volumes
-		} | ConvertTo-Json
-	}
-	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $ProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2069,7 +2644,7 @@ function Remove-PfaProtectionGroup()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Eradicate,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -2128,7 +2703,7 @@ function Remove-PfaProtectionGroupSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string[]] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Eradicate,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
@@ -2187,16 +2762,23 @@ function Restore-PfaProtectionGroup
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupRecover = @{
-		action = "recover"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupRecover -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupRecover = @{
+			action = "recover"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupRecover -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2204,7 +2786,7 @@ function Restore-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
@@ -2228,17 +2810,24 @@ function Rename-PfaProtectionGroup
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $NewName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupUpdate = @{
-		name = $NewName
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupUpdate -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupUpdate = @{
+			name = $NewName
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupUpdate -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2246,16 +2835,23 @@ function Enable-PfaProtectionGroupReplication
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupReplEnable = @{
-		replicate_enabled = "true"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupReplEnable = @{
+			replicate_enabled = "true"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2263,16 +2859,23 @@ function Disable-PfaProtectionGroupReplication
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupReplEnable = @{
-		replicate_enabled = "false"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupReplEnable = @{
+			replicate_enabled = "false"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupReplEnable -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2280,16 +2883,23 @@ function Enable-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupSnapEnable = @{
-		snap_enabled = "true"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupSnapEnable = @{
+			snap_enabled = "true"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2297,16 +2907,23 @@ function Disable-PfaProtectionGroupSnapshots
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PGroupSanpEnable = @{
-		snap_enabled = "false"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PGroupSanpEnable = @{
+			snap_enabled = "false"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PGroupSnapEnable -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2314,7 +2931,7 @@ function Add-PfaProtectionGroupMembers()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostGroups,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $Hosts,
@@ -2323,35 +2940,42 @@ function Add-PfaProtectionGroupMembers()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$UpdateProtectionGroup = $null
-	
-	if ($HostGroups)
+	try
 	{
-		$UpdateProtectionGroup = [ordered]@{
-			addhgrouplist = [Object[]]$HostGroups
-		} | ConvertTo-Json
+		$UpdateProtectionGroup = $null
+		
+		if ($HostGroups)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				addhgrouplist = [Object[]]$HostGroups
+			} | ConvertTo-Json
+		}
+		elseif ($Hosts)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				addhostlist = [Object[]]$Hosts
+			} | ConvertTo-Json
+		}
+		elseif ($Volumes)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				addvollist = [Object[]]$Volumes
+			} | ConvertTo-Json
+		}
+		elseif ($ReplicationTargets)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				addtargetlist = [Object[]]$ReplicationTargets
+			} | ConvertTo-Json
+		}
+		
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 	}
-	elseif ($Hosts)
+	catch
 	{
-		$UpdateProtectionGroup = [ordered]@{
-			addhostlist = [Object[]]$Hosts
-		} | ConvertTo-Json
+		Display-Error
 	}
-	elseif ($Volumes)
-	{
-		$UpdateProtectionGroup = [ordered]@{
-			addvollist = [Object[]]$Volumes
-		} | ConvertTo-Json
-	}
-	elseif ($ReplicationTargets)
-	{
-		$UpdateProtectionGroup = [ordered]@{
-			addtargetlist = [Object[]]$ReplicationTargets
-		} | ConvertTo-Json
-	}
-	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2359,7 +2983,7 @@ function Remove-PfaProtectionGroupMembers()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $HostGroups,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $Hosts,
@@ -2368,35 +2992,42 @@ function Remove-PfaProtectionGroupMembers()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$UpdateProtectionGroup = $null
-	
-	if ($HostGroups)
+	try
 	{
-		$UpdateProtectionGroup = [ordered]@{
-			remhgrouplist = [Object[]]$HostGroups
-		} | ConvertTo-Json
+		$UpdateProtectionGroup = $null
+		
+		if ($HostGroups)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				remhgrouplist = [Object[]]$HostGroups
+			} | ConvertTo-Json
+		}
+		elseif ($Hosts)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				remhostlist = [Object[]]$Hosts
+			} | ConvertTo-Json
+		}
+		elseif ($Volumes)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				remvollist = [Object[]]$Volumes
+			} | ConvertTo-Json
+		}
+		elseif ($ReplicationTargets)
+		{
+			$UpdateProtectionGroup = [ordered]@{
+				remtargetlist = [Object[]]$ReplicationTargets
+			} | ConvertTo-Json
+		}
+		
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 	}
-	elseif ($Hosts)
+	catch
 	{
-		$UpdateProtectionGroup = [ordered]@{
-			remhostlist = [Object[]]$Hosts
-		} | ConvertTo-Json
+		Display-Error
 	}
-	elseif ($Volumes)
-	{
-		$UpdateProtectionGroup = [ordered]@{
-			remvollist = [Object[]]$Volumes
-		} | ConvertTo-Json
-	}
-	elseif ($ReplicationTargets)
-	{
-		$UpdateProtectionGroup = [ordered]@{
-			remtargetlist = [Object[]]$ReplicationTargets
-		} | ConvertTo-Json
-	}
-	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2404,28 +3035,35 @@ function Update-PfaProtectionGroupReplication()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateSet('Allow', 'Disallow')][string]$Replication,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	switch ($Replication)
+	try
 	{
-		"Allow" {
-			$UpdateProtectionGroup = @{
-				allowed = "true"
-			} | ConvertTo-Json
+		switch ($Replication)
+		{
+			"Allow" {
+				$UpdateProtectionGroup = @{
+					allowed = "true"
+				} | ConvertTo-Json
+			}
+			"Disallow" {
+				$UpdateProtectionGroup = @{
+					allowed = "false"
+				} | ConvertTo-Json
+			}
 		}
-		"Disallow" {
-			$UpdateProtectionGroup = @{
-				allowed = "false"
-			} | ConvertTo-Json
-		}
+		
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
 	}
-	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $UpdateProtectionGroup -WebSession $Session -ContentType "application/json"
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2433,24 +3071,32 @@ function Set-PfaProtectionGroupReplicationBlackout()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][int] $StartTime,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][int] $EndTime,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$EndTimeSeconds = $EndTime * 3600
-	$StartTimeSeconds = $StartTime * 3600
 	
-	$SetBlackout = [ordered]@{
-		replicate_blackout = @{
-			end = $EndTimeSeconds
-			start = $StartTimeSeconds
-		}
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/pgroup/$Name"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetBlackout -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$EndTimeSeconds = $EndTime * 3600
+		$StartTimeSeconds = $StartTime * 3600
+		
+		$SetBlackout = [ordered]@{
+			replicate_blackout = @{
+				end = $EndTimeSeconds
+				start = $StartTimeSeconds
+			}
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/pgroup/$Name"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetBlackout -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2458,7 +3104,7 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $ProtectionGroup,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $SnapshotName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Prefix,
@@ -2467,8 +3113,8 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 		
 	)
 	
-	#try
-	#{
+	try
+	{
 		$PGroupVolumes = Get-PfaProtectionGroup -FlashArray $FlashArray -Name $ProtectionGroup -Session $Session
 		$PGroupSnapshotsSet = $SnapshotName
 		
@@ -2497,11 +3143,11 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 				}
 			}
 		}
-	#}
-	#catch
-	#{
-	#	Display-Error
-	#}
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -2513,11 +3159,19 @@ function Get-PfaPorts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$uri = "$PureStorageURIBase/port"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$uri = "$PureStorageURIBase/port"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2525,11 +3179,19 @@ function Get-PfaInitiators()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/port?initiators=true"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/port?initiators=true"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2537,11 +3199,19 @@ function Enable-PfaPorts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/port?enabled=true"
-	$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/port?enabled=true"
+		$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2549,11 +3219,19 @@ function Disable-PfaPorts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/port?enabled=false"
-	$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/port?enabled=false"
+		$Return = Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -2565,12 +3243,19 @@ function Get-PfaAlerts()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/alert"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/alert"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2578,13 +3263,20 @@ function Get-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email = "flasharray-alerts@purestorage.com",
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2592,13 +3284,20 @@ function New-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	$Return = (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		$Return = (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2606,16 +3305,23 @@ function Test-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Test = [ordered]@{
-		action = "test"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $Test -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Test = [ordered]@{
+			action = "test"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $Test -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2623,15 +3329,23 @@ function Enable-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$SetStatus = [ordered]@{
-		enabled = "true"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$SetStatus = [ordered]@{
+			enabled = "true"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2639,16 +3353,23 @@ function Disable-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$SetStatus = [ordered]@{
-		enabled = "false"
-	} | ConvertTo-Json
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$SetStatus = [ordered]@{
+			enabled = "false"
+		} | ConvertTo-Json
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $SetStatus -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2656,21 +3377,29 @@ function Get-PfaMessages()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateSet('All', 'Audit', 'Flagged', 'Open', 'Recent', 'User')][string]$Type,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Username,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	switch ($Type)
+	
+	try
 	{
-		"All" { $Uri = "$PureStorageURIBase/message" }
-		"Audit" { $Uri = "$PureStorageURIBase/message?audit=true" }
-		"Flagged" { $Uri = "$PureStorageURIBase/message?flagged=true" }
-		"Open" { $Uri = "$PureStorageURIBase/message?open=true" }
-		"Recent" { $Uri = "$PureStorageURIBase/message?recent=true" }
-		"User" { $Uri = "$PureStorageURIBase/message?user=$Username" }
+		switch ($Type)
+		{
+			"All" { $Uri = "$PureStorageURIBase/message" }
+			"Audit" { $Uri = "$PureStorageURIBase/message?audit=true" }
+			"Flagged" { $Uri = "$PureStorageURIBase/message?flagged=true" }
+			"Open" { $Uri = "$PureStorageURIBase/message?open=true" }
+			"Recent" { $Uri = "$PureStorageURIBase/message?recent=true" }
+			"User" { $Uri = "$PureStorageURIBase/message?user=$Username" }
+		}
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2678,13 +3407,20 @@ function Remove-PfaAlertRecipient()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Email,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/alert/$Email"
-	$Return = (Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/alert/$Email"
+		$Return = (Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2692,13 +3428,20 @@ function Hide-PfaMessage()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Id,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/message/$Id" +"?flagged=false"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/message/$Id" +"?flagged=false"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2706,13 +3449,20 @@ function Show-PfaMessage()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Id,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/message/$Id" + "?flagged=true"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $HideMessage -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/message/$Id" + "?flagged=true"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $HideMessage -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -2724,20 +3474,27 @@ function Get-PfaSnmp()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $EngineId,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($EngineId)
+	try
 	{
-		$Uri = "$PureStorageURIBase/snmp?engine_id=true"
+		If ($EngineId)
+		{
+			$Uri = "$PureStorageURIBase/snmp?engine_id=true"
+		}
+		else
+		{
+			$Uri = "$PureStorageURIBase/snmp"
+		}
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	else
+	catch
 	{
-		$Uri = "$PureStorageURIBase/snmp"
+		Display-Error
 	}
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2745,13 +3502,20 @@ function Remove-PfaSnmpManager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Manager,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		$Return = Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2759,13 +3523,20 @@ function Get-PfaSnmpManager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Manager,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2773,7 +3544,7 @@ function New-PfaSnmpv3Manager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Manager,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Hostname,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $User,
@@ -2784,19 +3555,26 @@ function New-PfaSnmpv3Manager()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$SnmpManagerv3Config = $null
-	$SnmpManagerv3Config = @{
-		host = $Hostname
-		user = $User
-		auth_protocol = $AuthProtocol
-		auth_passphrase = $AuthPassphrase
-		privacy_protocol = $PrivacyProtocol
-		privacy_passphrase = $PrivacyPassphrase
-		version = "v3"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv3Config -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$SnmpManagerv3Config = $null
+		$SnmpManagerv3Config = @{
+			host = $Hostname
+			user = $User
+			auth_protocol = $AuthProtocol
+			auth_passphrase = $AuthPassphrase
+			privacy_protocol = $PrivacyProtocol
+			privacy_passphrase = $PrivacyPassphrase
+			version = "v3"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv3Config -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2804,22 +3582,29 @@ function New-PfaSnmpv2cManager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Manager,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Hostname,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Community,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$SnmpManagerv2cConfig = $null
-	$SnmpManagerv2cConfig = @{
-		host = $Hostname
-		community = $Community
-		version = "v2c"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv2cConfig -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$SnmpManagerv2cConfig = $null
+		$SnmpManagerv2cConfig = @{
+			host = $Hostname
+			community = $Community
+			version = "v2c"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SnmpManagerv2cConfig -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2827,19 +3612,26 @@ function Update-PfaSnmpManager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Manager,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$SnmpManagerName = $null
-	$SnmpManagerName = @{
-		name = $Name
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SnmpManagerName -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$SnmpManagerName = $null
+		$SnmpManagerName = @{
+			name = $Name
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $SnmpManagerName -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2847,17 +3639,24 @@ function Test-PfaSnmpManager()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Manager,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$TestSnpManager = @{
-		action = "test"	
+	try
+	{
+		$TestSnpManager = @{
+			action = "test"	
+		}
+		
+		$Uri = "$PureStorageURIBase/snmp/$Manager"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $TestSnpManager -WebSession $Session -ContentType "application/json"
 	}
-	
-	$Uri = "$PureStorageURIBase/snmp/$Manager"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $TestSnpManager -WebSession $Session -ContentType "application/json"
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -2869,12 +3668,19 @@ function Get-PfaSslCert()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/cert"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/cert"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2882,29 +3688,36 @@ function Export-PfaSslCert()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $Certificate,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][switch] $IntermediateCertificate,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If (!$Certificate)
+	try
 	{
-		If (!$IntermediateCertificate)
+		If (!$Certificate)
 		{
-			$Uri = "$PureStorageURIBase/cert"
+			If (!$IntermediateCertificate)
+			{
+				$Uri = "$PureStorageURIBase/cert"
+			}
+			Else
+			{
+				$Uri = "$PureStorageURIBase/cert?intermediate_certificate=true"
+			}
 		}
 		Else
 		{
-			$Uri = "$PureStorageURIBase/cert?intermediate_certificate=true"
+			$Uri = "$PureStorageURIBase/cert?certificate=true"
 		}
+		
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	Else
+	catch
 	{
-		$Uri = "$PureStorageURIBase/cert?certificate=true"
+		Display-Error
 	}
-	
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #endregion
@@ -2916,12 +3729,19 @@ function Get-PfaDns
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/dns"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/dns"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2929,41 +3749,48 @@ function Set-PfaDns
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $Domain,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string[]] $Nameservers,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Dns = $null
-	If ($Domain)
+	try
 	{
-		If ($Namesevers)
+		$Dns = $null
+		If ($Domain)
+		{
+			If ($Namesevers)
+			{
+				$Dns = @{
+					domain = $Domain
+					nameservers = [Object[]]$Nameservers
+				} | ConvertTo-Json
+			}
+			else
+			{
+				$Dns = @{
+					domain = $Domain
+				} | ConvertTo-Json
+			}
+			else
+			{
+			}
+		}
+		elseif ($Nameservers)
 		{
 			$Dns = @{
-				domain = $Domain
 				nameservers = [Object[]]$Nameservers
 			} | ConvertTo-Json
 		}
-		else
-		{
-			$Dns = @{
-				domain = $Domain
-			} | ConvertTo-Json
-		}
-		else
-		{
-		}
+		
+		$Uri = "$PureStorageURIBase/dns"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Dns -WebSession $Session -ContentType "application/json"
 	}
-	elseif ($Nameservers)
+	catch
 	{
-		$Dns = @{
-			nameservers = [Object[]]$Nameservers
-		} | ConvertTo-Json
+		Display-Error
 	}
-	
-	$Uri = "$PureStorageURIBase/dns"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Dns -WebSession $Session -ContentType "application/json"
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2971,12 +3798,19 @@ function Get-PfaNetwork
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/network"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/network"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -2984,13 +3818,20 @@ function Get-PfaNetworkInterface
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][string]$Interface,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/network/$Interface"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/network/$Interface"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 
@@ -3003,11 +3844,19 @@ function Get-PfaHardware()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/hardware"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/hardware"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3015,12 +3864,20 @@ function Get-PfaHardwareComponent()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Component,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/hardware/$Component"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/hardware/$Component"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3028,31 +3885,38 @@ function Show-PfaHardwareLed()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Component,
 		[Parameter(Mandatory = $True)][ValidateSet('On', 'Off')][string]$State,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-
-	$LED = $null
-	switch ($State)
-	{
-		"On"
-		{
-			$LED = @{
-				identify = "on"
-			} | ConvertTo-Json
-		}
-		"Off"
-		{
-			$LED = @{
-				identify = "off"
-			} | ConvertTo-Json
-		}
-	}
 	
-	$Uri = "$PureStorageURIBase/hardware/$Component"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $LED -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$LED = $null
+		switch ($State)
+		{
+			"On"
+			{
+				$LED = @{
+					identify = "on"
+				} | ConvertTo-Json
+			}
+			"Off"
+			{
+				$LED = @{
+					identify = "off"
+				} | ConvertTo-Json
+			}
+		}
+		
+		$Uri = "$PureStorageURIBase/hardware/$Component"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $LED -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3060,11 +3924,19 @@ function Get-PfaDrives()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/drive"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/drive"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3072,12 +3944,20 @@ function Get-PfaDrive()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Location,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
-	$Uri = "$PureStorageURIBase/drive/$Location"
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	
+	try
+	{
+		$Uri = "$PureStorageURIBase/drive/$Location"
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -3089,18 +3969,25 @@ function Get-PfaUsers()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateSet('API_Token', 'Public_Key')][string]$Show,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	switch ($Show)
+	try
 	{
-		"API_Token" { $Uri = "$PureStorageURIBase/admin?api_token=true&expose=true" }
-		"Public_Key" { $Uri = "$PureStorageURIBase/admin?publickey=true" }
+		switch ($Show)
+		{
+			"API_Token" { $Uri = "$PureStorageURIBase/admin?api_token=true&expose=true" }
+			"Public_Key" { $Uri = "$PureStorageURIBase/admin?publickey=true" }
+		}
+		
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	
-	return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3108,30 +3995,37 @@ function Get-PfaUser()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateSet('API_Token', 'Public_Key')][string]$Show,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $User,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	If ($User)
+	try
 	{
-		switch ($Show)
+		If ($User)
 		{
-			"API_Token" { $Uri = "$PureStorageURIBase/admin/$User" + "/apitoken" }
-			"Public_Key" { $Uri = "$PureStorageURIBase/admin/$User" + "?publickey=true"}
+			switch ($Show)
+			{
+				"API_Token" { $Uri = "$PureStorageURIBase/admin/$User" + "/apitoken" }
+				"Public_Key" { $Uri = "$PureStorageURIBase/admin/$User" + "?publickey=true"}
+			}
 		}
+		else
+		{
+			switch ($Show)
+			{
+				"API_Token" { $Uri = "$PureStorageURIBase/admin?api_token=true&expose=true" }
+				"Public_Key" { $Uri = "$PureStorageURIBase/admin?publickey=true" }
+			}
+		}
+		
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 	}
-	else
+	catch
 	{
-		switch ($Show)
-		{
-			"API_Token" { $Uri = "$PureStorageURIBase/admin?api_token=true&expose=true" }
-			"Public_Key" { $Uri = "$PureStorageURIBase/admin?publickey=true" }
-		}
+		Display-Error
 	}
-	
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3139,13 +4033,20 @@ function New-PfaApiToken()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $User,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/admin/$User" + "/apitoken" 
-	return (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/admin/$User" + "/apitoken" 
+		return (Invoke-RestMethod -Method POST -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3153,17 +4054,24 @@ function Clear-PfaPermissionCache()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$ClearPermCache = $null
-	$ClearPermCache = @{
-		clear = "true"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/admin?action=refresh"
-	return (Invoke-RestMethod -Method PUT -Uri $Uri -Body $ClearPermCache -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$ClearPermCache = $null
+		$ClearPermCache = @{
+			clear = "true"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/admin?action=refresh"
+		return (Invoke-RestMethod -Method PUT -Uri $Uri -Body $ClearPermCache -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3171,21 +4079,28 @@ function Set-PfaUserPassword()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $User,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Old,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $New,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Password = $null
-	$Password = @{
-		old_password = $Old
-		password = $New
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/admin/$User"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Password -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Password = $null
+		$Password = @{
+			old_password = $Old
+			password = $New
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/admin/$User"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $Password -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3193,19 +4108,26 @@ function Set-PfaUserPublicKey()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $User,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $PublicKey,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$PubKey = $null
-	$PubKey = @{
-		publickey = $PublicKey
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/admin/$User"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PubKey -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$PubKey = $null
+		$PubKey = @{
+			publickey = $PublicKey
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/admin/$User"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $PubKey -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3213,13 +4135,20 @@ function Remove-PfaApiToken()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $User,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/admin/$User" + "/apitoken"
-	$Return =  Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$Uri = "$PureStorageURIBase/admin/$User" + "/apitoken"
+		$Return =  Invoke-RestMethod -Method DELETE -Uri $Uri -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3227,12 +4156,19 @@ function Get-PfaDirectoryService()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/directoryservice"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/directoryservice"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3240,12 +4176,19 @@ function Get-PfaDirectoryServiceGroups()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/directoryservice?groups=true"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/directoryservice?groups=true"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3253,12 +4196,19 @@ function Get-PfaDirectoryServiceCertificate()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$Uri = "$PureStorageURIBase/directoryservice?certificate=true"
-	return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	try
+	{
+		$Uri = "$PureStorageURIBase/directoryservice?certificate=true"
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3266,18 +4216,25 @@ function Test-PfaDirectoryService()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$DirService = $null
-	$DirService = @{
-		action = "test"	
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/directoryservice"
-	$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirService -WebSession $Session -ContentType "application/json")
-	return $Return.output
+	try
+	{
+		$DirService = $null
+		$DirService = @{
+			action = "test"	
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/directoryservice"
+		$Return = (Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirService -WebSession $Session -ContentType "application/json")
+		return $Return.output
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3285,17 +4242,24 @@ function Enable-PfaDirectoryService()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$DirServiceEnabled = $null
-	$DirServiceEnabled = @{
-		enabled = "true"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/directoryservice"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$DirServiceEnabled = $null
+		$DirServiceEnabled = @{
+			enabled = "true"
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/directoryservice"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3303,17 +4267,24 @@ function Disable-PfaDirectoryService()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$DirServiceEnabled = $null
-	$DirServiceEnabled = @{
-		enabled = "false"
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/directoryservice"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$DirServiceEnabled = $null
+		$DirServiceEnabled = @{
+			enabled = "false"
+		} | ConvertTo-Json
+
+		$Uri = "$PureStorageURIBase/directoryservice"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceEnabled -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
@@ -3321,7 +4292,7 @@ function Update-PfaDirectoryService()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string[]] $LdapUri,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $BaseDN,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $GroupBase,
@@ -3333,20 +4304,27 @@ function Update-PfaDirectoryService()
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
-	$DirServiceConfig = $null
-	$DirServiceConfig = @{
-		uri = [Object[]]$LdapUri
-		base_dn = $BaseDN
-		group_base = $GroupBase
-		array_admin_group = $ArrayAdminGroup
-		storage_admin_group = $StorageAdminGroup
-		readonly_group = $ReadOnlyGroup
-		bind_user = $BindUser
-		bind_password = $BindPassword
-	} | ConvertTo-Json
-	
-	$Uri = "$PureStorageURIBase/directoryservice"
-	$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceConfig -WebSession $Session -ContentType "application/json"
+	try
+	{
+		$DirServiceConfig = $null
+		$DirServiceConfig = @{
+			uri = [Object[]]$LdapUri
+			base_dn = $BaseDN
+			group_base = $GroupBase
+			array_admin_group = $ArrayAdminGroup
+			storage_admin_group = $StorageAdminGroup
+			readonly_group = $ReadOnlyGroup
+			bind_user = $BindUser
+			bind_password = $BindPassword
+		} | ConvertTo-Json
+		
+		$Uri = "$PureStorageURIBase/directoryservice"
+		$Return = Invoke-RestMethod -Method PUT -Uri $Uri -Body $DirServiceConfig -WebSession $Session -ContentType "application/json"
+	}
+	catch
+	{
+		Display-Error
+	}
 }
 
 #endregion
@@ -3427,13 +4405,11 @@ Export-ModuleMember -function Get-PfaProtectionGroupSpace
 Export-ModuleMember -function New-PfaProtectionGroupSnapshot
 Export-ModuleMember -function New-PfaProtectionGroup
 Export-ModuleMember -function Remove-PfaProtectionGroup
-#Export-ModuleMember -function Eradicate-PfaProtectionGroup #deprecated, added -Eradicate flag to Remove-PfaProtectionGroup
 Export-ModuleMember -function Restore-PfaProtectionGroup
 Export-ModuleMember -function Rename-PfaProtectionGroup
 Export-ModuleMember -function Restore-PfaProtectionGroupVolumeSnapshots
 Set-Alias -Name restorepgsnap -Value Restore-PfaProtectionGroupVolumeSnapshots -Scope Global
 Export-ModuleMember -function Remove-PfaProtectionGroupSnapshots
-#Export-ModuleMember -function Eradicate-PfaProtectionGroupSnapshots #deprecated, added -Eradicate flag to Remove-PfaProtectionGroupSnapshots
 Export-ModuleMember -function Restore-PfaProtectionGroupSnapshots
 Export-ModuleMember -function Enable-PfaProtectionGroupReplication
 Export-ModuleMember -function Disable-PfaProtectionGroupReplication
@@ -3453,15 +4429,13 @@ Export-ModuleMember -Function Get-PfaVolumePrivateConnections
 Export-ModuleMember -Function Get-PfaVolumeDiff
 Export-ModuleMember -function New-PfaVolume
 Set-Alias -Name newvol -Value New-PfaVolume -Scope Global
-Export-ModuleMember -function Update-PfaVolume #deprecated Referesh-PfaVolume
+Export-ModuleMember -function Update-PfaVolume
 Export-ModuleMember -function New-PfaSnapshot
 Set-Alias -Name newsnap -Value New-PfaSnapshot -Scope Global
 Export-ModuleMember -function Remove-PfaVolume
 Set-Alias -Name delvol -Value Remove-PfaVolume -Scope Global
 Export-ModuleMember -function Remove-PfaSnapshot
 Set-Alias -Name delsnap -Value Remove-PfaSnapshot -Scope Global
-#Export-ModuleMember -Function Eradicate-PfaVolume  #deprecated, added -Eradicate flag to Remove-PfaVolume
-Set-Alias -Name flushvol -Value Eradicate-PfaVolume -Scope Global
 Export-ModuleMember -function Rename-PfaVolume
 Export-ModuleMember -function Resize-PfaVolume
 Export-ModuleMember -function Restore-PfaVolume
