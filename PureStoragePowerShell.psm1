@@ -5,7 +5,7 @@
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.5.0.324
+	 Version:		2.6.0.401
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -223,16 +223,16 @@ function Get-PfaApiVersion()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray,
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
+		[Parameter(Mandatory = $True, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray
 	)
 	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 	
 	try
 	{
-		$Uri = "https://$FlashArray/api/api_version"
-		$Return = (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session)
-		$global:PureStorageRestApi = $Return.Version.Item($Return.Version.Count - 1).ToString()
+		$url = "https://$FlashArray/api/api_version"
+		$wc = New-Object System.Net.WebClient
+		$restapiver = $wc.DownloadString($url) | ConvertFrom-Json
+		$global:PureStorageRestApi = $restapiver.version.GetValue($restapiver.version.Count - 1)
 		$global:PureStorageURIBase = "https://$FlashArray/api/$global:PureStorageRestApi"
 	}
 	catch
@@ -248,7 +248,7 @@ function Get-PfaApiToken()
 	Param (
 		[Parameter(Mandatory = $True, Position = 0)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True, Position = 1)][ValidateNotNullOrEmpty()][PSCredential] $Credential,
-		[ValidateSet('1.0', '1.1', '1.2', '1.3', '1.4')][string]$RESTAPI = "1.4"
+		[ValidateSet('1.0', '1.1', '1.2', '1.3', '1.4')][string]$RESTAPI
 	)
 	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 	
@@ -264,8 +264,17 @@ function Get-PfaApiToken()
 				username = $Credential.GetNetWorkCredential().Username
 				password = $Credential.GetNetWorkCredential().Password
 			}
+			
+			if (!($RESTAPI))
+			{
+				Get-PfaApiVersion -FlashArray $FlashArray
+			}
+			else
+			{
+				$global:PureStorageURIBase = "https://$FlashArray/api/$RESTAPI"
+			}
+			
 			$global:FlashArray = $FlashArray
-			$global:PureStorageURIBase = "https://$FlashArray/api/$RESTAPI"
 			
 			try
 			{
@@ -301,7 +310,6 @@ function Connect-PfaController()
 		$Uri = "$PureStorageURIBase/auth/session"
 		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SessionAuthentication -SessionVariable Session
 		$Session
-		Get-PfaApiVersion -FlashArray $global:FlashArray -Session $Session
 	}
 	Catch
 	{
