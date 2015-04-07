@@ -5,7 +5,7 @@
 	 Coded to:		Blade Runner (Soundtrack from the Motion Picture)
 	 Organization: 	Pure Storage, Inc.
 	 Filename:     	PureStoragePowerShell.psm1
-	 Version:		2.6.0.401
+	 Version:		2.7.0.407
 	 Copyright:		2014 Pure Storage, Inc.
 	-------------------------------------------------------------------------
 	 Module Name: PureStoragePowerShell
@@ -279,7 +279,7 @@ function Get-PfaApiToken()
 			try
 			{
 				$Uri = "$PureStorageURIBase/auth/apitoken"
-				return (Invoke-RestMethod -Method POST -Uri $Uri -Body $AuthAction)
+				return (Invoke-RestMethod -Method POST -Uri $Uri -Body $AuthAction -TimeoutSec 900)
 			}
 			Catch
 			{
@@ -308,7 +308,7 @@ function Connect-PfaController()
 	try
 	{
 		$Uri = "$PureStorageURIBase/auth/session"
-		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SessionAuthentication -SessionVariable Session
+		$Return = Invoke-RestMethod -Method POST -Uri $Uri -Body $SessionAuthentication -SessionVariable Session -TimeoutSec 900
 		$Session
 	}
 	Catch
@@ -1032,7 +1032,7 @@ function Get-PfaVolumes()
 	try
 	{
 		$Uri = "$PureStorageURIBase/volume"
-		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json")
+		return (Invoke-RestMethod -Method Get -Uri $Uri -WebSession $Session -ContentType "application/json" -TimeoutSec 900)
 	}
 	catch
 	{
@@ -1177,7 +1177,7 @@ function Get-PfaVolume()
 	try
 	{
 		$Uri = "$PureStorageURIBase/volume/$Name"
-		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json")
+		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json" -TimeoutSec 900)
 	}
 	catch
 	{
@@ -2304,7 +2304,7 @@ function Get-PfaProtectionGroupsSnapshots()
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $FlashArray,
+		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
@@ -3123,7 +3123,7 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 	
 	try
 	{
-		$PGroupVolumes = Get-PfaProtectionGroup -FlashArray $FlashArray -Name $ProtectionGroup -Session $Session
+		$PGroupVolumes = Get-PfaProtectionGroup -Name $ProtectionGroup -Session $Session
 		$PGroupSnapshotsSet = $SnapshotName
 		
 		ForEach ($PGroupVolume in $PGroupVolumes)
@@ -3144,10 +3144,10 @@ function Restore-PfaProtectionGroupVolumeSnapshots()
 				$NewPGSnapshotVol = ($ValidPGroupVolName).Replace($ValidSourceName, $Prefix + "-")
 				$Temp = $PGroupVolume.volumes[$i].Replace($PGroupVolume.source + ":", "")
 				$NewSource = ($PGroupSnapshotsSet + "." + $Temp)
-					New-PfaVolume -FlashArray $FlashArray -Name $NewPGSnapshotVol -Source $NewSource -Session $Session -ErrorAction Stop
+					New-PfaVolume -Name $NewPGSnapshotVol -Source $NewSource -Session $Session -ErrorAction Stop
 				If ($Hostname)
 				{
-					Connect-PfaVolume -FlashArray $FlashArray -Name $Hostname -Volume $NewPGSnapshotVol -Session $Session -ErrorAction Stop
+					Connect-PfaVolume -Name $Hostname -Volume $NewPGSnapshotVol -Session $Session -ErrorAction Stop
 				}
 			}
 		}
