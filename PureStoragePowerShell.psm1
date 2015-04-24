@@ -1,4 +1,4 @@
-﻿<#	
+<#	
 	===========================================================================
 	 Created with: 	SAPIEN Technologies, Inc., PowerShell Studio 2015
 	 Created by:   	barkz@PureStoragePowerShell.com
@@ -1167,16 +1167,21 @@ function Get-PfaHistoricalVolumePerformance()
 #.ExternalHelp PureStoragePowerShell.psm1-help.xml
 function Get-PfaVolume()
 {
-	[CmdletBinding()]
+	[CmdletBinding(DefaultParameterSetName="ByName")]
 	Param (
 		[Parameter(Mandatory = $False)][ValidateNotNullOrEmpty()][string] $FlashArray,
-		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
+		[Parameter(ParameterSetName="ByName",Mandatory = $True)][ValidateNotNullOrEmpty()][string] $Name,
+		[Parameter(ParameterSetName="ByHost",ValueFromPipelineByPropertyName=$true)][ValidateNotNullOrEmpty()][string]$HostName,
 		[Parameter(Mandatory = $True)][ValidateNotNullOrEmpty()][Microsoft.PowerShell.Commands.WebRequestSession]$Session
 	)
 	
 	try
 	{
-		$Uri = "$PureStorageURIBase/volume/$Name"
+		$Uri = Switch ($PsCmdlet.ParameterSetName) {
+			## for getting the volumes associated with the given host
+			"ByHost" {"$PureStorageURIBase/host/$HostName/volume"}
+			"ByName" {"$PureStorageURIBase/volume/$Name"}
+		}
 		return (Invoke-RestMethod -Method GET -Uri $Uri -WebSession $Session -ContentType "application/json" -TimeoutSec 900)
 	}
 	catch
